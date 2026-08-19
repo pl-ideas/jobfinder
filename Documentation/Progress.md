@@ -10,6 +10,7 @@ MVP project scaffold.
 - Chose job-board/API-style sources for the initial ingestion path.
 - Chose SQLite for local persistence.
 - Created initial project documentation and source layout.
+- Added reusable daily JSON discovery for Built In, Dice, Indeed, LinkedIn Jobs, and Wellfound with authentication checkpoints for login-gated boards.
 
 ## Next Milestones
 
@@ -17,6 +18,7 @@ MVP project scaffold.
 2. Refine the normalized job model as new sources reveal edge cases.
 3. Add more filters and improve result formatting.
 4. Add direct company career-site crawlers after the core workflow is stable.
+5. Monitor public job-board markup changes and adjust site adapters as needed.
 
 ## Notes
 

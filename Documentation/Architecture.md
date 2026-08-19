@@ -21,6 +21,8 @@ Source adapters know how to fetch jobs from a specific job source. Each adapter 
 
 The first adapter targets an API-style remote job board. Future adapters can support other job boards or specific company career pages.
 
+Daily JSON discovery uses the same adapter boundary for public job-board pages. Site-specific behavior for Built In, Dice, Indeed, LinkedIn Jobs, and Wellfound lives in `Source\jobfinder\sources\web_boards.py`; orchestration lives in `Source\jobfinder\discovery.py`.
+
 ### Normalized Job Model
 
 Every posting is represented with common fields:
@@ -39,6 +41,8 @@ Every posting is represented with common fields:
 ### Storage
 
 SQLite is used for local storage in the MVP. It keeps the first version simple while still allowing deduplication, filtering, and later reporting.
+
+The daily job-board scan also writes a JSON database under `Job Database\jobs-YYYY-MM-DD.json`. Existing same-day JSON is read, merged, deduplicated by normalized company and title, and then rewritten as parseable JSON.
 
 ### Filtering
 

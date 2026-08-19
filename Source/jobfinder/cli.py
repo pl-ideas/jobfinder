@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from jobfinder.discovery import run_daily_discovery
 from jobfinder.filters import JobFilter, filter_jobs
 from jobfinder.models import JobPosting
 from jobfinder.sources import RemotiveSource
@@ -16,6 +17,10 @@ def main() -> None:
 
     if args.command == "fetch":
         run_fetch(args)
+        return
+
+    if args.command == "discover-daily":
+        run_discover_daily(args)
         return
 
     parser.print_help()
@@ -37,6 +42,19 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--min-salary", type=int)
     fetch.add_argument("--allow-company", action="append", default=[])
     fetch.add_argument("--block-company", action="append", default=[])
+
+    discover = subparsers.add_parser(
+        "discover-daily",
+        help="Scan supported job boards and write Job Database/jobs-{date}.json.",
+    )
+    discover.add_argument("--output-dir", type=Path, help="Directory for the daily JSON database.")
+    discover.add_argument("--limit-per-query", type=int, default=10)
+    discover.add_argument(
+        "--continue-after-auth-checkpoint",
+        action="store_true",
+        help="Record login-required sites and continue to later sources instead of stopping.",
+    )
+    discover.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
 
     return parser
 
@@ -69,6 +87,35 @@ def build_source(name: str) -> JobSource:
     if name == "remotive":
         return RemotiveSource()
     raise ValueError(f"Unsupported source: {name}")
+
+
+def run_discover_daily(args: argparse.Namespace) -> None:
+    result = run_daily_discovery(
+        output_dir=args.output_dir,
+        limit_per_query=args.limit_per_query,
+        stop_on_authentication_required=not args.continue_after_auth_checkpoint,
+        progress=None if args.quiet else print_progress,
+    )
+
+    if result.authentication_required_sites and not args.continue_after_auth_checkpoint:
+        site = result.authentication_required_sites[0]
+        print(f"LOGIN REQUIRED: {site}. Please log in using the browser and tell me when authentication is complete.")
+        return
+
+    print(f"Sites successfully scanned: {', '.join(result.scanned_sites) or 'none'}")
+    print(f"Sites requiring authentication: {', '.join(result.authentication_required_sites) or 'none'}")
+    if result.failed_sites:
+        print("Sites that failed:")
+        for site, reason in result.failed_sites.items():
+            print(f"  - {site}: {reason}")
+    else:
+        print("Sites that failed: none")
+    print(f"Unique jobs collected: {len(result.jobs)}")
+    print(f"JSON output path: {result.output_path}")
+
+
+def print_progress(message: str) -> None:
+    print(message, flush=True)
 
 
 def print_jobs(jobs: list[JobPosting]) -> None:
