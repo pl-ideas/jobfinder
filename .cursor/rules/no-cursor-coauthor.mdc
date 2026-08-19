@@ -1,0 +1,12 @@
+---
+description: Prevent Cursor co-author trailers in commits
+alwaysApply: true
+---
+
+# No Cursor Co-Author Trailers
+
+Never add `Co-authored-by: Cursor <cursoragent@cursor.com>` to any commit message.
+
+Do not add any `Co-authored-by` trailer that identifies Cursor, Cursor Agent, `cursoragent@cursor.com`, or any automated AI agent unless the user explicitly requests that exact trailer in the current prompt.
+
+Before creating, amending, squashing, or rewriting a commit, ensure the final commit message contains only the user-approved subject/body and no Cursor co-author trailer.

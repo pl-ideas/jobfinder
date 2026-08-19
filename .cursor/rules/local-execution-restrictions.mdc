@@ -1,0 +1,23 @@
+---
+description: Local execution guidance for JobFinder development
+alwaysApply: true
+---
+
+# Local Execution Guidance
+
+Local development commands are allowed when they stay within the project and help validate code changes.
+
+Allowed by default:
+
+- Python import checks, unit tests, linting, formatting, and type checks.
+- CLI help commands and commands that operate only on local fixtures or local databases.
+- Short one-off commands that validate behavior without contacting third-party systems.
+
+Ask before running commands that:
+
+- Fetch live jobs, crawl websites, or contact third-party APIs.
+- Start long-running schedulers, watchers, servers, or browser automation.
+- Install new dependencies or make broad environment changes.
+- Write outside the local repository.
+
+If validation is skipped because it would contact external systems or run for a long time, state what was not run and why.

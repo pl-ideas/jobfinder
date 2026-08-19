@@ -1,0 +1,26 @@
+---
+description: Clear wording for project-facing work artifacts
+alwaysApply: true
+---
+
+# Work Artifact Wording
+
+Keep commit messages, PR descriptions, release notes, and documentation focused on the technical change, user impact, and validation status.
+
+Avoid unnecessary private workflow details in durable project artifacts, including agent assistance, conversation context, local machine quirks, or who performed which step.
+
+Use clear validation language. Examples:
+
+```text
+Validation: local import check passed.
+```
+
+```text
+Validation: not run; live source fetch requires confirmation.
+```
+
+```text
+Validation pending.
+```
+
+For commit messages, use the commit-message rule. For chat summaries, be direct and practical; they do not need to follow a rigid external-facing format.

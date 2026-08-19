@@ -1,0 +1,26 @@
+---
+description: Third-party access guidance for JobFinder
+alwaysApply: true
+---
+
+# Third-Party Systems Are Read-Only
+
+Treat every third-party or remote system as read-only unless the user explicitly requests the exact write action in the current prompt.
+
+For JobFinder, reading public job postings, public job-board API responses, public company career pages, and related metadata is allowed when it supports the requested local development or research task.
+
+Never create, update, delete, submit, post, approve, merge, deploy, comment on, react to, apply to a job, save a job in a remote account, or otherwise mutate anything in:
+
+- Jira, Confluence, Linear, Slack, Teams, email, or ticketing/collaboration tools
+- GitHub, Bitbucket, GitLab, Azure DevOps, or any source-control hosting service
+- Vercel, Netlify, cloud dashboards, deployment tools, CI/CD systems, observability tools, or admin consoles
+- Job boards, company career sites, applicant tracking systems, or any other third-party browser page or API
+
+Do not use browser automation, MCP tools, REST APIs, forms, buttons, keyboard input, or scripts to perform remote writes.
+
+Allowed by default:
+
+- Read pages, tickets, pull requests, comments, logs, attachments, metadata, and API responses.
+- Write local repository files only when the user requested local implementation or documentation work.
+
+If a task appears to require a third-party write, stop and ask for explicit confirmation naming the exact target system and action.

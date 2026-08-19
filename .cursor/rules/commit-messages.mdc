@@ -1,0 +1,20 @@
+---
+description: Lightweight commit message guidance for JobFinder
+alwaysApply: true
+---
+
+# Commit Message Format
+
+Use concise, present-tense commit messages that describe the project change.
+
+Prefer a simple one-line subject for small changes:
+
+```text
+Add initial Remotive source adapter
+```
+
+Use a short body only when it helps explain why the change was made or how it was validated.
+
+Do not require a ticket prefix unless the user explicitly provides one for the current work.
+
+Keep commit messages focused on repository changes. Do not mention agent interactions, private workflow details, generated project rules, or conversation context unless the user explicitly asks for that wording.

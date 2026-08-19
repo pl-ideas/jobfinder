@@ -1,0 +1,29 @@
+---
+description: JobFinder documentation discovery locations
+alwaysApply: true
+---
+
+# Discovery Locations
+
+Project documentation lives under:
+
+```text
+Documentation\
+```
+
+Before making architecture, crawling, filtering, storage, or source-adapter changes, check the relevant project documentation when it exists.
+
+Core documents:
+
+- `Documentation\Goal.md` for project purpose, MVP scope, and non-goals.
+- `Documentation\Architecture.md` for system structure and data flow.
+- `Documentation\Challenges.md` for known risks around crawling, APIs, matching, stale jobs, and privacy.
+- `Documentation\Progress.md` for recent decisions and implementation status.
+
+If source-specific notes are added later, place them under:
+
+```text
+Documentation\Sources\{source-name}.md
+```
+
+When adding or changing source adapters, update source-specific documentation if the behavior, limits, or setup requirements are not obvious from the code.

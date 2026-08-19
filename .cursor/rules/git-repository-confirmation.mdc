@@ -1,0 +1,42 @@
+---
+description: Read-only git command guidance for JobFinder
+alwaysApply: true
+---
+
+# Read-Only Git Command Guidance
+
+Git commands are for reviewing repository state and helping inspect merge conflicts only.
+
+Use read-only git commands in the current JobFinder workspace when they help understand local changes, history, or conflict state.
+
+Allowed by default:
+
+- `git status`
+- `git diff`
+- `git show`
+- `git log`
+- `git branch --show-current`
+- `git remote -v`
+- `git ls-files`
+
+Do not run git commands that write to repository state. This includes:
+
+- `git add`
+- `git commit`
+- `git push`
+- `git pull`
+- `git merge`
+- `git rebase`
+- `git checkout`
+- `git switch`
+- `git reset`
+- `git clean`
+- `git tag`
+- `git stash`
+- `git restore`
+
+The user handles commit messages, commits, staging, branch changes, and pushes manually.
+
+If more than one repository could plausibly be involved, ask which repository to use before running any git command.
+
+Never run destructive git commands such as hard resets, force pushes, or clean operations.
