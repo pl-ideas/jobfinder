@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from jobfinder.daily_jobs import DailyJobRecord, classify_work_mode, is_relevant_remote_development_job
+from jobfinder.job_ranking import RankingProfile, load_default_ranking_profile, rank_job_text
 from jobfinder.skill_matching import SkillProfile, evaluate_job_skills, load_default_skill_profile
 
 
@@ -42,6 +43,7 @@ class PublicJobBoardSource:
         jobs: list[DailyJobRecord] = []
         seen_urls: set[str] = set()
         skill_profile = load_default_skill_profile()
+        ranking_profile = load_default_ranking_profile()
 
         for term in SEARCH_TERMS:
             search_url = self.search_url(term)
@@ -77,7 +79,7 @@ class PublicJobBoardSource:
                     )
                     continue
 
-                extracted_jobs = self.extract_jobs(detail_html, detail_url, skill_profile)
+                extracted_jobs = self.extract_jobs(detail_html, detail_url, skill_profile, ranking_profile)
                 jobs.extend(extracted_jobs)
                 _report(
                     progress,
@@ -109,8 +111,20 @@ class PublicJobBoardSource:
                 detail_urls.append(link.href)
         return detail_urls
 
-    def extract_jobs(self, page_html: str, page_url: str, skill_profile: SkillProfile) -> list[DailyJobRecord]:
-        jobs = extract_json_ld_jobs(page_html, source=self.display_name, fallback_url=page_url, skill_profile=skill_profile)
+    def extract_jobs(
+        self,
+        page_html: str,
+        page_url: str,
+        skill_profile: SkillProfile,
+        ranking_profile: RankingProfile,
+    ) -> list[DailyJobRecord]:
+        jobs = extract_json_ld_jobs(
+            page_html,
+            source=self.display_name,
+            fallback_url=page_url,
+            skill_profile=skill_profile,
+            ranking_profile=ranking_profile,
+        )
         if jobs:
             return [job.normalized() for job in jobs]
 
@@ -119,7 +133,9 @@ class PublicJobBoardSource:
         if title and company:
             description = html_to_text(page_html[:50000])
             work_mode, work_mode_evidence = classify_work_mode(description)
-            skill_match = evaluate_job_skills(_job_match_text(title, company, extract_location_text(page_html), description), skill_profile)
+            match_text = _job_match_text(title, company, extract_location_text(page_html), description)
+            skill_match = evaluate_job_skills(match_text, skill_profile)
+            rank_result = rank_job_text(match_text, ranking_profile)
             return [
                 DailyJobRecord(
                     companyName=company,
@@ -135,6 +151,8 @@ class PublicJobBoardSource:
                     matchedSkills=skill_match.matched_skills,
                     excludedSkillsFound=skill_match.excluded_skills_found,
                     exclusionReason=skill_match.exclusion_reason,
+                    rank=rank_result.rank,
+                    rankEvidence=rank_result.evidence,
                 ).normalized()
             ]
         return []
@@ -258,9 +276,11 @@ def extract_json_ld_jobs(
     source: str,
     fallback_url: str,
     skill_profile: SkillProfile | None = None,
+    ranking_profile: RankingProfile | None = None,
 ) -> list[DailyJobRecord]:
     jobs: list[DailyJobRecord] = []
     profile = skill_profile or load_default_skill_profile()
+    rank_profile = ranking_profile or load_default_ranking_profile()
     for raw_json in JsonLdParser.collect(page_html):
         for item in _flatten_json_ld(raw_json):
             if item.get("@type") != "JobPosting":
@@ -273,7 +293,9 @@ def extract_json_ld_jobs(
             description = html_to_text(_string_value(item.get("description")) or "")
             metadata_remote = _json_ld_remote(item) is True
             location = _json_ld_location(item)
-            skill_match = evaluate_job_skills(_job_match_text(title, company, location, description), profile)
+            match_text = _job_match_text(title, company, location, description)
+            skill_match = evaluate_job_skills(match_text, profile)
+            rank_result = rank_job_text(match_text, rank_profile)
             work_mode, work_mode_evidence = classify_work_mode(
                 description,
                 metadata_remote=metadata_remote,
@@ -296,6 +318,8 @@ def extract_json_ld_jobs(
                     matchedSkills=skill_match.matched_skills,
                     excludedSkillsFound=skill_match.excluded_skills_found,
                     exclusionReason=skill_match.exclusion_reason,
+                    rank=rank_result.rank,
+                    rankEvidence=rank_result.evidence,
                 ).normalized()
             )
     return jobs

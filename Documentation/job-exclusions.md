@@ -245,6 +245,45 @@ For example, `Senior Software Engineer` could represent:
 
 Determine the primary engineering stack before deciding whether the job belongs in job results.
 
+# Excluded Employer Types
+
+Recruiting, staffing, placement, and consulting firms should normally be excluded when they are the listed hiring company rather than the direct employer.
+
+Indicators include:
+
+* Staffing agency
+* Staffing firm
+* Staffing services
+* Technology staffing
+* IT staffing
+* Recruiting agency
+* Recruiting firm
+* Recruitment agency
+* Recruitment firm
+* Talent agency
+* Talent solutions
+* Workforce solutions
+* Staff augmentation
+* Contract staffing
+* Placement services
+* Professional staffing
+* Consulting and staffing
+* Technology consulting and staffing
+
+Known excluded examples:
+
+* Synersys Technologies
+
+These employers should generally be treated as bogus or low-value job postings because they often represent intermediary listings rather than direct hiring opportunities.
+
+Acceptable recruiting agencies:
+
+* Apex Systems
+* TEKsystems
+* Kforce Technology Staffing
+
+These agencies should not be automatically excluded. If the scanner cannot derive a useful careers URL for one of them, it should flag the company for manual verification instead.
+
 # Exclusion Decision Rules
 
 When evaluating a discovered job, classify its primary engineering ecosystem before calculating skill compatibility.

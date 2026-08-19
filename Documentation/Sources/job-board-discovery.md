@@ -65,3 +65,5 @@ python -m jobfinder.cli discover-daily
 The command prints progress while it scans: output target, current site, current search term, candidate listing count, detail pages reviewed, collected job counts, dedupe count, and saved JSON path. Use `--quiet` to suppress progress messages, or `--limit-per-query` to cap detail pages reviewed per search term during development.
 
 During extraction, the scanner reads available job-description text and compares it with `Documentation\current-skills.md` and `Documentation\job-exclusions.md`. Remote jobs with meaningful current-skill matches are kept. Jobs with only excluded-stack indicators are filtered out. Jobs that mention both current skills and excluded technologies are kept so incidental excluded technologies do not discard otherwise relevant matches.
+
+Each saved job also receives a `rank` from 1 to 10 based on overlap between the job text, `Documentation\current-resume.md`, and `Documentation\current-skills.md`. Higher ranks indicate stronger fit. The daily JSON output is ordered by rank descending, then salary descending within each rank.

@@ -13,9 +13,17 @@ def default_project_root() -> Path:
 
 
 def daily_database_path(output_dir: Path | None = None, generated_on: date | None = None) -> Path:
+    return dated_database_path("jobs", output_dir=output_dir, generated_on=generated_on)
+
+
+def verified_jobs_database_path(output_dir: Path | None = None, generated_on: date | None = None) -> Path:
+    return dated_database_path("verified-jobs", output_dir=output_dir, generated_on=generated_on)
+
+
+def dated_database_path(prefix: str, output_dir: Path | None = None, generated_on: date | None = None) -> Path:
     generated = generated_on or date.today()
     directory = output_dir or default_project_root() / "Job Database"
-    return directory / f"jobs-{generated.isoformat()}.json"
+    return directory / f"{prefix}-{generated.isoformat()}.json"
 
 
 def load_daily_jobs(path: Path) -> list[DailyJobRecord]:
@@ -38,13 +46,33 @@ def merge_and_save_daily_jobs(
 ) -> Path:
     generated = generated_on or date.today()
     output_path = daily_database_path(output_dir=output_dir, generated_on=generated)
+    return merge_and_save_jobs(new_jobs, output_path=output_path, generated_on=generated)
+
+
+def merge_and_save_verified_jobs(
+    new_jobs: list[DailyJobRecord],
+    *,
+    output_dir: Path | None = None,
+    generated_on: date | None = None,
+) -> Path:
+    generated = generated_on or date.today()
+    output_path = verified_jobs_database_path(output_dir=output_dir, generated_on=generated)
+    return merge_and_save_jobs(new_jobs, output_path=output_path, generated_on=generated)
+
+
+def merge_and_save_jobs(
+    new_jobs: list[DailyJobRecord],
+    *,
+    output_path: Path,
+    generated_on: date,
+) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     existing_jobs = load_daily_jobs(output_path)
     jobs = deduplicate_jobs(existing_jobs + new_jobs)
     payload = {
-        "generatedDate": generated.isoformat(),
-        "jobs": [job.normalized(generated).to_json_dict() for job in jobs],
+        "generatedDate": generated_on.isoformat(),
+        "jobs": [job.normalized(generated_on).to_json_dict() for job in jobs],
     }
     output_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return output_path
@@ -72,6 +100,8 @@ def _job_from_json(item: dict[str, Any]) -> DailyJobRecord:
         matchedSkills=_string_tuple(item.get("matchedSkills")),
         excludedSkillsFound=_string_tuple(item.get("excludedSkillsFound")),
         exclusionReason=_optional_string(item.get("exclusionReason")),
+        rank=_int_or_default(item.get("rank"), 1),
+        rankEvidence=_string_tuple(item.get("rankEvidence")),
     )
 
 
@@ -86,3 +116,12 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
     return tuple(text for item in value if (text := str(item).strip()))
+
+
+def _int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return default

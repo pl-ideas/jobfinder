@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import date
 from urllib.parse import urlparse
 
+from jobfinder.employer_exclusions import is_excluded_employer
+
 
 RELEVANT_TITLE_TERMS = (
     "software engineer",
@@ -86,6 +88,8 @@ class DailyJobRecord:
     matchedSkills: tuple[str, ...] = ()
     excludedSkillsFound: tuple[str, ...] = ()
     exclusionReason: str | None = None
+    rank: int = 1
+    rankEvidence: tuple[str, ...] = ()
 
     def normalized(self, discovered_on: date | None = None) -> "DailyJobRecord":
         discovered = discovered_on or date.today()
@@ -108,6 +112,8 @@ class DailyJobRecord:
             matchedSkills=tuple(_clean_text(skill) for skill in self.matchedSkills if _clean_text(skill)),
             excludedSkillsFound=tuple(_clean_text(skill) for skill in self.excludedSkillsFound if _clean_text(skill)),
             exclusionReason=_optional_text(self.exclusionReason),
+            rank=max(1, min(10, int(self.rank))),
+            rankEvidence=tuple(_clean_text(item) for item in self.rankEvidence if _clean_text(item)),
         )
 
     def to_json_dict(self) -> dict[str, object]:
@@ -128,6 +134,8 @@ class DailyJobRecord:
             "matchedSkills": list(self.matchedSkills),
             "excludedSkillsFound": list(self.excludedSkillsFound),
             "exclusionReason": self.exclusionReason,
+            "rank": self.rank,
+            "rankEvidence": list(self.rankEvidence),
         }
 
 
@@ -144,6 +152,9 @@ def is_relevant_remote_development_job(job: DailyJobRecord) -> bool:
     ).lower()
 
     if any(term in title for term in EXCLUDED_TITLE_TERMS):
+        return False
+
+    if is_excluded_employer(job.companyName):
         return False
 
     if job.workMode in {"hybrid", "onsite"}:
@@ -190,10 +201,10 @@ def deduplicate_jobs(jobs: list[DailyJobRecord]) -> list[DailyJobRecord]:
 
         key = duplicate_key(normalized)
         existing = deduped.get(key)
-        if existing is None or _directness_score(normalized) > _directness_score(existing):
+        if existing is None or _dedupe_score(normalized) > _dedupe_score(existing):
             deduped[key] = normalized
 
-    return sorted(deduped.values(), key=lambda item: (item.companyName.lower(), item.jobTitle.lower()))
+    return sorted(deduped.values(), key=_ranked_sort_key)
 
 
 def duplicate_key(job: DailyJobRecord) -> str:
@@ -216,7 +227,32 @@ def _directness_score(job: DailyJobRecord) -> int:
         score += 2
     if any(marker in job.applicationUrl.lower() for marker in ("apply", "application", "greenhouse", "lever", "workday")):
         score += 1
+    if job.source.lower().startswith("company careers"):
+        score += 8
+    if application_host and not any(marker in application_host for marker in ("builtin.com", "dice.com", "indeed.com", "linkedin.com", "wellfound.com")):
+        score += 1
     return score
+
+
+def _dedupe_score(job: DailyJobRecord) -> tuple[int, int]:
+    return _directness_score(job), job.rank
+
+
+def _ranked_sort_key(job: DailyJobRecord) -> tuple[int, int, str, str]:
+    return (-job.rank, -salary_sort_value(job.salary), job.companyName.lower(), job.jobTitle.lower())
+
+
+def salary_sort_value(value: str | None) -> int:
+    if not value:
+        return 0
+
+    amounts: list[int] = []
+    for match in re.finditer(r"([0-9]+(?:,[0-9]{3})?)(k)?", value, flags=re.IGNORECASE):
+        amount = int(match.group(1).replace(",", ""))
+        if match.group(2):
+            amount *= 1000
+        amounts.append(amount)
+    return max(amounts, default=0)
 
 
 def _host(value: str) -> str:
