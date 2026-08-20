@@ -19,7 +19,7 @@ Public boards are processed before login-gated boards. If LinkedIn Jobs, Wellfou
 Daily results are written to:
 
 ```text
-Job Database\jobs-YYYY-MM-DD.json
+Job Database\01-job-board-results\jobs.json
 ```
 
 The JSON schema is:
@@ -48,7 +48,7 @@ The JSON schema is:
 
 `workMode` is a compact classification from available job-description text and structured metadata: `remote`, `hybrid`, `onsite`, or `unknown`. `workModeEvidence` stores one short matched phrase or metadata explanation; the full job description is not saved by default.
 
-If the same-day file already exists, it is loaded and merged with new results. Duplicate detection uses a normalized company-and-title key and keeps the record with the most direct application URL.
+If the stage file already exists, it is loaded and merged with new results. Duplicate detection uses a normalized company-and-title key and keeps the record with the most direct application URL.
 
 ## Adding A Board
 
@@ -61,6 +61,8 @@ From `Source`:
 ```powershell
 python -m jobfinder.cli discover-daily
 ```
+
+`discover-job-boards` is a compatibility alias for the same stage 1 scan.
 
 The command prints progress while it scans: output target, current site, current search term, candidate listing count, detail pages reviewed, collected job counts, dedupe count, and saved JSON path. Use `--quiet` to suppress progress messages, or `--limit-per-query` to cap detail pages reviewed per search term during development.
 

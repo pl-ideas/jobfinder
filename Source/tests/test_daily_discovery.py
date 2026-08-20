@@ -18,11 +18,17 @@ from jobfinder.company_careers import (
     career_entry_urls,
     company_homepage_candidates,
     company_search_urls,
+    discover_company_career_pages,
+    discover_career_urls_from_verified_homepage,
     discover_career_urls_from_homepage,
-    discover_career_urls_from_search,
+    discover_homepage_from_search,
+    discover_verified_jobs,
     latest_daily_database_path,
+    load_career_pages,
+    load_company_sites,
     run_company_careers_discovery,
     scan_company_careers,
+    verify_company_sites,
 )
 from jobfinder.daily_storage import daily_database_path, merge_and_save_daily_jobs, parse_daily_database
 from jobfinder.discovery import run_daily_discovery
@@ -185,8 +191,9 @@ class DailyStorageTests(unittest.TestCase):
             output_dir = Path(temporary_directory) / "Job Database"
             path = daily_database_path(output_dir=output_dir, generated_on=date(2026, 8, 19))
 
-        self.assertEqual(path.name, "jobs-2026-08-19.json")
-        self.assertEqual(path.parent.name, "Job Database")
+        self.assertEqual(path.name, "jobs.json")
+        self.assertEqual(path.parent.name, "01-job-board-results")
+        self.assertEqual(path.parent.parent.name, "Job Database")
 
     def test_merge_and_save_preserves_existing_jobs_and_writes_parseable_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -471,13 +478,26 @@ class CompanyCareersTests(unittest.TestCase):
     def test_latest_daily_database_path_uses_newest_date(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_dir = Path(temporary_directory) / "Job Database"
-            output_dir.mkdir()
-            older = output_dir / "jobs-2026-08-18.json"
-            newer = output_dir / "jobs-2026-08-19.json"
+            stage_dir = output_dir / "01-job-board-results"
+            stage_dir.mkdir(parents=True)
+            older = stage_dir / "jobs-2026-08-18.json"
+            newer = stage_dir / "jobs-2026-08-19.json"
             older.write_text('{"generatedDate": "2026-08-18", "jobs": []}', encoding="utf-8")
             newer.write_text('{"generatedDate": "2026-08-19", "jobs": []}', encoding="utf-8")
 
             self.assertEqual(latest_daily_database_path(output_dir), newer)
+
+    def test_latest_daily_database_path_prefers_stable_stage_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory) / "Job Database"
+            stage_dir = output_dir / "01-job-board-results"
+            stage_dir.mkdir(parents=True)
+            legacy = stage_dir / "jobs-2026-08-19.json"
+            stable = stage_dir / "jobs.json"
+            legacy.write_text('{"generatedDate": "2026-08-19", "jobs": []}', encoding="utf-8")
+            stable.write_text('{"generatedDate": "2026-08-20", "jobs": []}', encoding="utf-8")
+
+            self.assertEqual(latest_daily_database_path(output_dir), stable)
 
     def test_career_entry_urls_skips_job_board_and_ats_urls(self) -> None:
         job = DailyJobRecord(
@@ -527,7 +547,7 @@ class CompanyCareersTests(unittest.TestCase):
 
         self.assertEqual(result.status, "HOMEPAGE_FOUND_NO_CAREER_LINKS")
 
-    def test_public_search_finds_official_career_link(self) -> None:
+    def test_public_search_finds_and_verifies_official_homepage(self) -> None:
         search_url = company_search_urls("Citadel Securities")[0]
         pages = {
             search_url: """
@@ -535,11 +555,50 @@ class CompanyCareersTests(unittest.TestCase):
                   <a href="/l/?uddg=https%3A%2F%2Fwww.citadelsecurities.com%2Fcareers%2F">Careers</a>
                 </html>
             """,
+            "https://www.citadelsecurities.com": "<html>Citadel Securities</html>",
         }
 
-        result = discover_career_urls_from_search("Citadel Securities", fetcher=lambda url: pages[url])
+        result = discover_homepage_from_search("Citadel Securities", fetcher=lambda url: pages[url])
 
-        self.assertEqual(result.status, "SEARCH_CAREERS_FOUND")
+        self.assertEqual(result.status, "SEARCH_HOMEPAGE_FOUND")
+        self.assertEqual(result.homepage_url, "https://www.citadelsecurities.com")
+
+    def test_public_search_uses_later_provider_when_first_provider_fails(self) -> None:
+        bing_url = company_search_urls("Affirm")[1]
+        pages = {
+            bing_url: '<html><a href="https://www.affirm.com">Affirm</a></html>',
+            "https://www.affirm.com": "<html>Affirm homepage</html>",
+        }
+
+        result = discover_homepage_from_search("Affirm", fetcher=lambda url: pages[url])
+
+        self.assertEqual(result.status, "SEARCH_HOMEPAGE_FOUND")
+        self.assertEqual(result.homepage_url, "https://www.affirm.com")
+
+    def test_public_search_reports_unverified_homepage_candidate(self) -> None:
+        search_url = company_search_urls("Affirm")[0]
+        pages = {
+            search_url: '<html><a href="https://www.affirm.com">Affirm</a></html>',
+        }
+
+        result = discover_homepage_from_search(
+            "Affirm",
+            fetcher=lambda url: pages[url] if url in pages else (_ for _ in ()).throw(RuntimeError(url)),
+        )
+
+        self.assertEqual(result.status, "SEARCH_RESULT_UNVERIFIED")
+        self.assertEqual(result.homepage_url, "https://www.affirm.com")
+
+    def test_verified_homepage_discovery_finds_career_link(self) -> None:
+        pages = {"https://www.citadelsecurities.com": '<html><a href="/careers/">Careers</a></html>'}
+
+        result = discover_career_urls_from_verified_homepage(
+            "Citadel Securities",
+            "https://www.citadelsecurities.com",
+            fetcher=lambda url: pages[url],
+        )
+
+        self.assertEqual(result.status, "HOMEPAGE_CAREERS_FOUND")
         self.assertEqual(result.career_urls, ["https://www.citadelsecurities.com/careers/"])
 
     def test_company_careers_discovery_writes_matching_corporate_job_to_verified_file(self) -> None:
@@ -558,16 +617,20 @@ class CompanyCareersTests(unittest.TestCase):
                 rank=8,
             )
             input_path = merge_and_save_daily_jobs([seed], output_dir=output_dir, generated_on=generated_on)
+            search_url = company_search_urls("Example")[0]
             pages = {
+                search_url: '<html><a href="https://www.example.com">Example</a></html>',
+                "https://www.example.com": '<html><a href="/careers">Careers</a></html>',
+                "https://www.example.com/careers": '<html><a href="/jobs/2">Senior Software Engineer</a></html>',
                 "https://example.com/careers": '<html><a href="/jobs/2">Senior Software Engineer</a></html>',
-                "https://example.com/jobs/2": """
+                "https://www.example.com/jobs/2": """
                     <html>
                       <script type="application/ld+json">
                       {
                         "@context": "https://schema.org",
                         "@type": "JobPosting",
                         "title": "Software Engineer",
-                        "url": "https://example.com/jobs/2",
+                        "url": "https://www.example.com/jobs/2",
                         "hiringOrganization": {"name": "Example"},
                         "jobLocationType": "TELECOMMUTE",
                         "description": "Remote role building C# .NET React Azure systems."
@@ -590,17 +653,18 @@ class CompanyCareersTests(unittest.TestCase):
         self.assertEqual(len(result.jobs_added), 1)
         self.assertEqual(result.review_statuses[0].status, "FULLY_REVIEWED")
         self.assertEqual(result.review_statuses[0].pagesReviewed, 2)
-        self.assertEqual(result.output_path.name, "verified-jobs-2026-08-19.json")
+        self.assertEqual(result.output_path.name, "verified-jobs.json")
+        self.assertEqual(result.output_path.parent.name, "04-matched-company-jobs")
         self.assertEqual(seed_payload["jobs"][0]["source"], "Built In")
         self.assertEqual(verified_payload["jobs"][0]["source"], "Company Careers: Example")
-        self.assertEqual(verified_payload["jobs"][0]["jobUrl"], "https://example.com/jobs/2")
+        self.assertEqual(verified_payload["jobs"][0]["jobUrl"], "https://www.example.com/jobs/2")
 
-    def test_company_careers_discovery_uses_homepage_career_link_when_seed_has_no_corporate_url(self) -> None:
+    def test_company_careers_discovery_does_not_guess_company_domain_when_search_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_dir = Path(temporary_directory) / "Job Database"
             generated_on = date(2026, 8, 19)
             seed = DailyJobRecord(
-                companyName="Example",
+                companyName="Cash App",
                 jobTitle="Software Engineer",
                 jobUrl="https://builtin.com/job/123",
                 applicationUrl="https://builtin.com/job/123",
@@ -611,35 +675,20 @@ class CompanyCareersTests(unittest.TestCase):
                 rank=8,
             )
             input_path = merge_and_save_daily_jobs([seed], output_dir=output_dir, generated_on=generated_on)
-            pages = {
-                "https://example.com": '<html><a href="/careers">Careers</a></html>',
-                "https://example.com/careers": '<html><a href="/jobs/2">Senior Software Engineer</a></html>',
-                "https://example.com/jobs/2": """
-                    <html>
-                      <script type="application/ld+json">
-                      {
-                        "@context": "https://schema.org",
-                        "@type": "JobPosting",
-                        "title": "Software Engineer",
-                        "url": "https://example.com/jobs/2",
-                        "hiringOrganization": {"name": "Example"},
-                        "jobLocationType": "TELECOMMUTE",
-                        "description": "Remote role building C# .NET React Azure systems."
-                      }
-                      </script>
-                    </html>
-                """,
-            }
+            requested_urls: list[str] = []
 
             result = run_company_careers_discovery(
                 input_path=input_path,
                 output_dir=output_dir,
                 limit_pages_per_company=5,
-                fetcher=lambda url: pages[url],
+                fetcher=lambda url: requested_urls.append(url) or (_ for _ in ()).throw(RuntimeError(url)),
             )
 
-        self.assertEqual(result.review_statuses[0].status, "FULLY_REVIEWED")
-        self.assertEqual(len(result.jobs_added), 1)
+        self.assertEqual(result.review_statuses[0].status, "NO_SEARCH_RESULTS")
+        self.assertEqual(len(result.jobs_added), 0)
+        self.assertTrue(requested_urls)
+        self.assertTrue(all("duckduckgo.com" in url or "bing.com" in url for url in requested_urls))
+        self.assertFalse(any("cashapp.com" in url for url in requested_urls))
 
     def test_company_careers_discovery_uses_public_search_career_link(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -664,6 +713,7 @@ class CompanyCareersTests(unittest.TestCase):
                       <a href="/l/?uddg=https%3A%2F%2Fwww.citadelsecurities.com%2Fcareers%2F">Careers</a>
                     </html>
                 """,
+                "https://www.citadelsecurities.com": '<html><a href="/careers/">Careers</a></html>',
                 "https://www.citadelsecurities.com/careers/": '<html><a href="/careers/job/2">Senior Software Engineer</a></html>',
                 "https://www.citadelsecurities.com/careers/job/2": """
                     <html>
@@ -692,7 +742,79 @@ class CompanyCareersTests(unittest.TestCase):
         self.assertEqual(result.review_statuses[0].status, "FULLY_REVIEWED")
         self.assertEqual(len(result.jobs_added), 1)
 
-    def test_company_careers_discovery_reports_no_homepage(self) -> None:
+    def test_split_pipeline_writes_each_stage_to_numbered_output_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory) / "Job Database"
+            generated_on = date(2026, 8, 19)
+            seed = DailyJobRecord(
+                companyName="Citadel Securities",
+                jobTitle="Software Engineer",
+                jobUrl="https://builtin.com/job/123",
+                applicationUrl="https://builtin.com/job/123",
+                source="Built In",
+                location="Remote",
+                remote=True,
+                matchedSkills=("C#", ".NET", "React"),
+                rank=8,
+            )
+            job_board_path = merge_and_save_daily_jobs([seed], output_dir=output_dir, generated_on=generated_on)
+            search_url = company_search_urls("Citadel Securities")[0]
+            pages = {
+                search_url: """
+                    <html>
+                      <a href="/l/?uddg=https%3A%2F%2Fwww.citadelsecurities.com%2F">Citadel Securities</a>
+                    </html>
+                """,
+                "https://www.citadelsecurities.com": '<html><a href="/careers/">Careers</a></html>',
+                "https://www.citadelsecurities.com/careers/": """
+                    <html>
+                      <script type="application/ld+json">
+                      {
+                        "@context": "https://schema.org",
+                        "@type": "JobPosting",
+                        "title": "Software Engineer",
+                        "url": "https://www.citadelsecurities.com/careers/job/2",
+                        "hiringOrganization": {"name": "Citadel Securities"},
+                        "jobLocationType": "TELECOMMUTE",
+                        "description": "Remote role building C# .NET React Azure systems."
+                      }
+                      </script>
+                    </html>
+                """,
+            }
+
+            sites_result = verify_company_sites(
+                input_path=job_board_path,
+                output_dir=output_dir,
+                fetcher=lambda url: pages[url],
+            )
+            pages_result = discover_company_career_pages(
+                input_path=sites_result.output_path,
+                output_dir=output_dir,
+                fetcher=lambda url: pages[url],
+            )
+            jobs_result = discover_verified_jobs(
+                career_pages_path=pages_result.output_path,
+                seed_jobs_path=job_board_path,
+                output_dir=output_dir,
+                fetcher=lambda url: pages[url],
+            )
+
+            company_sites = load_company_sites(sites_result.output_path)
+            career_pages = load_career_pages(pages_result.output_path)
+            verified_payload = parse_daily_database(jobs_result.output_path)
+
+        self.assertEqual(job_board_path.parent.name, "01-job-board-results")
+        self.assertEqual(sites_result.output_path.parent.name, "02-verified-company-sites")
+        self.assertEqual(pages_result.output_path.parent.name, "03-verified-career-pages")
+        self.assertEqual(jobs_result.output_path.parent.name, "04-matched-company-jobs")
+        self.assertEqual(company_sites[0].status, "VERIFIED")
+        self.assertEqual(company_sites[0].homepageUrl, "https://www.citadelsecurities.com")
+        self.assertEqual(career_pages[0].status, "CAREER_PAGE_FOUND")
+        self.assertEqual(career_pages[0].careerPageUrl, "https://www.citadelsecurities.com/careers/")
+        self.assertEqual(verified_payload["jobs"][0]["companyName"], "Citadel Securities")
+
+    def test_company_careers_discovery_reports_no_search_results(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_dir = Path(temporary_directory) / "Job Database"
             generated_on = date(2026, 8, 19)
@@ -715,7 +837,36 @@ class CompanyCareersTests(unittest.TestCase):
                 fetcher=lambda url: (_ for _ in ()).throw(RuntimeError(url)),
             )
 
-        self.assertEqual(result.review_statuses[0].status, "NO_HOMEPAGE")
+        self.assertEqual(result.review_statuses[0].status, "NO_SEARCH_RESULTS")
+
+    def test_company_careers_discovery_flags_unverified_search_result_for_manual_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory) / "Job Database"
+            generated_on = date(2026, 8, 19)
+            seed = DailyJobRecord(
+                companyName="Affirm",
+                jobTitle="Software Engineer",
+                jobUrl="https://builtin.com/job/123",
+                applicationUrl="https://builtin.com/job/123",
+                source="Built In",
+                location="Remote",
+                remote=True,
+                matchedSkills=("C#",),
+            )
+            input_path = merge_and_save_daily_jobs([seed], output_dir=output_dir, generated_on=generated_on)
+            search_url = company_search_urls("Affirm")[0]
+            pages = {
+                search_url: '<html><a href="https://www.affirm.com">Affirm</a></html>',
+            }
+
+            result = run_company_careers_discovery(
+                input_path=input_path,
+                output_dir=output_dir,
+                fetcher=lambda url: pages[url] if url in pages else (_ for _ in ()).throw(RuntimeError(url)),
+            )
+
+        self.assertEqual(result.review_statuses[0].status, "MANUAL_VERIFICATION")
+        self.assertIn("https://www.affirm.com", result.review_statuses[0].reason or "")
 
     def test_company_careers_discovery_skips_excluded_employer_seed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -952,7 +1103,7 @@ class FakeSource:
         self.authentication_required = authentication_required
         self.failed_reason = failed_reason
 
-    def scan(self, *, limit_per_query: int = 10, progress=None) -> SourceScanResult:
+    def scan(self, *, limit_per_query: int = 100, progress=None) -> SourceScanResult:
         if progress is not None:
             progress(f"{self.display_name}: fake progress.")
         return SourceScanResult(

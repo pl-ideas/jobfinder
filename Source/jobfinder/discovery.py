@@ -43,7 +43,7 @@ def run_daily_discovery(
     *,
     output_dir: Path | None = None,
     generated_on: date | None = None,
-    limit_per_query: int = 10,
+    limit_per_query: int = 100,
     stop_on_authentication_required: bool = True,
     progress: ProgressCallback | None = None,
 ) -> DailyDiscoveryResult:

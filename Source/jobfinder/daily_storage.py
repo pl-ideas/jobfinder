@@ -7,23 +7,67 @@ from typing import Any
 
 from jobfinder.daily_jobs import DailyJobRecord, deduplicate_jobs
 
+JOB_BOARD_STAGE_DIR = "01-job-board-results"
+COMPANY_SITE_STAGE_DIR = "02-verified-company-sites"
+CAREER_PAGE_STAGE_DIR = "03-verified-career-pages"
+MATCHED_JOB_STAGE_DIR = "04-matched-company-jobs"
+
 
 def default_project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
 def daily_database_path(output_dir: Path | None = None, generated_on: date | None = None) -> Path:
-    return dated_database_path("jobs", output_dir=output_dir, generated_on=generated_on)
+    return job_board_database_path(output_dir=output_dir, generated_on=generated_on)
+
+
+def job_board_database_path(output_dir: Path | None = None, generated_on: date | None = None) -> Path:
+    return stage_database_path("jobs", output_dir=output_dir, stage_dir=JOB_BOARD_STAGE_DIR)
+
+
+def company_sites_database_path(output_dir: Path | None = None, generated_on: date | None = None) -> Path:
+    return stage_database_path("company-sites", output_dir=output_dir, stage_dir=COMPANY_SITE_STAGE_DIR)
+
+
+def career_pages_database_path(output_dir: Path | None = None, generated_on: date | None = None) -> Path:
+    return stage_database_path("career-pages", output_dir=output_dir, stage_dir=CAREER_PAGE_STAGE_DIR)
 
 
 def verified_jobs_database_path(output_dir: Path | None = None, generated_on: date | None = None) -> Path:
-    return dated_database_path("verified-jobs", output_dir=output_dir, generated_on=generated_on)
+    return stage_database_path("verified-jobs", output_dir=output_dir, stage_dir=MATCHED_JOB_STAGE_DIR)
 
 
-def dated_database_path(prefix: str, output_dir: Path | None = None, generated_on: date | None = None) -> Path:
+def stage_database_path(prefix: str, output_dir: Path | None = None, stage_dir: str | None = None) -> Path:
+    directory = output_dir or default_project_root() / "Job Database"
+    if stage_dir:
+        directory = directory / stage_dir
+    return directory / f"{prefix}.json"
+
+
+def dated_database_path(
+    prefix: str,
+    output_dir: Path | None = None,
+    generated_on: date | None = None,
+    stage_dir: str | None = None,
+) -> Path:
     generated = generated_on or date.today()
     directory = output_dir or default_project_root() / "Job Database"
+    if stage_dir:
+        directory = directory / stage_dir
     return directory / f"{prefix}-{generated.isoformat()}.json"
+
+
+def latest_dated_database_path(prefix: str, output_dir: Path | None = None, stage_dir: str | None = None) -> Path:
+    directory = output_dir or default_project_root() / "Job Database"
+    if stage_dir:
+        directory = directory / stage_dir
+    stable_path = directory / f"{prefix}.json"
+    if stable_path.exists():
+        return stable_path
+    files = sorted(directory.glob(f"{prefix}-*.json"), reverse=True)
+    if not files:
+        raise FileNotFoundError(f"No {prefix} files found in {directory}")
+    return files[0]
 
 
 def load_daily_jobs(path: Path) -> list[DailyJobRecord]:

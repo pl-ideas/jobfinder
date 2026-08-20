@@ -42,7 +42,7 @@ Every posting is represented with common fields:
 
 SQLite is used for local storage in the MVP. It keeps the first version simple while still allowing deduplication, filtering, and later reporting.
 
-The daily job-board scan also writes a JSON database under `Job Database\jobs-YYYY-MM-DD.json`. Existing same-day JSON is read, merged, deduplicated by normalized company and title, and then rewritten as parseable JSON.
+The daily job-board scan also writes a JSON database under `Job Database\01-job-board-results\jobs.json`. Existing JSON is read, merged, deduplicated by normalized company and title, and then rewritten as parseable JSON.
 
 ### Filtering
 

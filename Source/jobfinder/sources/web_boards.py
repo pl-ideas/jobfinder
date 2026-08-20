@@ -39,7 +39,7 @@ class PublicJobBoardSource:
     display_name: str
     login_gated: bool = False
 
-    def scan(self, *, limit_per_query: int = 10, progress: ProgressCallback | None = None) -> SourceScanResult:
+    def scan(self, *, limit_per_query: int = 100, progress: ProgressCallback | None = None) -> SourceScanResult:
         jobs: list[DailyJobRecord] = []
         seen_urls: set[str] = set()
         skill_profile = load_default_skill_profile()

@@ -42,14 +42,16 @@ Build the daily JSON job database from supported job boards:
 python -m jobfinder.cli discover-daily
 ```
 
-The daily discovery command scans public boards first, then login-gated boards. If a login-gated site requires authentication, it prints a `LOGIN REQUIRED` checkpoint and stops without attempting to authenticate. Output is merged into `..\Job Database\jobs-YYYY-MM-DD.json`.
+The daily discovery command scans public boards first, then login-gated boards. If a login-gated site requires authentication, it prints a `LOGIN REQUIRED` checkpoint and stops without attempting to authenticate. Output is merged into `..\Job Database\01-job-board-results\jobs.json`.
 
 Progress messages are printed by default so long scans show the current site, search term, detail-page review count, dedupe count, and saved output path. Add `--quiet` to suppress them.
 
-Scan corporate career pages from the latest daily JSON database:
+Run the company-site, career-page, and verified-job stages manually after reviewing each output file:
 
 ```powershell
-python -m jobfinder.cli discover-company-careers
+python -m jobfinder.cli verify-company-sites
+python -m jobfinder.cli discover-career-pages
+python -m jobfinder.cli discover-verified-jobs
 ```
 
 Use `--limit-companies` and `--limit-pages-per-company` during development to keep the scan bounded. Add `--allow-domain-guessing` only when you want the job to try guessed company career domains.

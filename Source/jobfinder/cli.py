@@ -3,7 +3,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from jobfinder.company_careers import run_company_careers_discovery
+from jobfinder.company_careers import (
+    discover_company_career_pages,
+    discover_verified_jobs,
+    verify_company_sites,
+)
 from jobfinder.discovery import run_daily_discovery
 from jobfinder.filters import JobFilter, filter_jobs
 from jobfinder.models import JobPosting
@@ -20,12 +24,20 @@ def main() -> None:
         run_fetch(args)
         return
 
-    if args.command == "discover-daily":
+    if args.command in {"discover-daily", "discover-job-boards"}:
         run_discover_daily(args)
         return
 
-    if args.command == "discover-company-careers":
-        run_discover_company_careers(args)
+    if args.command == "verify-company-sites":
+        run_verify_company_sites(args)
+        return
+
+    if args.command == "discover-career-pages":
+        run_discover_career_pages(args)
+        return
+
+    if args.command == "discover-verified-jobs":
+        run_discover_verified_jobs(args)
         return
 
     parser.print_help()
@@ -39,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--source", choices=["remotive"], default="remotive")
     fetch.add_argument("--query", help="Search query sent to the source.")
     fetch.add_argument("--db", type=Path, default=Path("jobfinder.sqlite3"))
-    fetch.add_argument("--limit", type=int, default=25)
+    fetch.add_argument("--limit", type=int, default=100)
     fetch.add_argument("--include-keyword", action="append", default=[])
     fetch.add_argument("--exclude-keyword", action="append", default=[])
     fetch.add_argument("--location")
@@ -50,38 +62,55 @@ def build_parser() -> argparse.ArgumentParser:
 
     discover = subparsers.add_parser(
         "discover-daily",
-        help="Scan supported job boards and write Job Database/jobs-{date}.json.",
+        help="Scan supported job boards and write Job Database/01-job-board-results/jobs.json.",
     )
     discover.add_argument("--output-dir", type=Path, help="Directory for the daily JSON database.")
-    discover.add_argument("--limit-per-query", type=int, default=10)
+    discover.add_argument("--limit-per-query", type=int, default=100)
     discover.add_argument(
         "--continue-after-auth-checkpoint",
         action="store_true",
         help="Record login-required sites and continue to later sources instead of stopping.",
     )
     discover.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
-
-    company_careers = subparsers.add_parser(
-        "discover-company-careers",
-        help="Scan company career sites from the latest daily JSON database.",
+    discover_alias = subparsers.add_parser(
+        "discover-job-boards",
+        help="Alias for discover-daily; writes stage 1 job-board results.",
     )
-    company_careers.add_argument("--input-file", type=Path, help="Daily JSON file to use as seed jobs.")
-    company_careers.add_argument("--output-dir", type=Path, help="Directory containing the daily JSON database.")
-    company_careers.add_argument("--limit-companies", type=int, help="Maximum number of companies to review.")
-    company_careers.add_argument("--limit-pages-per-company", type=int, default=25)
-    company_careers.add_argument(
-        "--allow-domain-guessing",
+    discover_alias.add_argument("--output-dir", type=Path, help="Root Job Database directory.")
+    discover_alias.add_argument("--limit-per-query", type=int, default=100)
+    discover_alias.add_argument(
+        "--continue-after-auth-checkpoint",
         action="store_true",
-        default=True,
-        help="Try guessed company homepages when no corporate URL is present. Enabled by default.",
+        help="Record login-required sites and continue to later sources instead of stopping.",
     )
-    company_careers.add_argument(
-        "--no-domain-guessing",
-        dest="allow_domain_guessing",
-        action="store_false",
-        help="Disable guessed company homepage checks.",
+    discover_alias.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
+
+    verify_sites = subparsers.add_parser(
+        "verify-company-sites",
+        help="Stage 2: verify official company homepages from stage 1 results.",
     )
-    company_careers.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
+    verify_sites.add_argument("--input-file", type=Path, help="Stage 1 jobs JSON file to use as seed jobs.")
+    verify_sites.add_argument("--output-dir", type=Path, help="Root Job Database directory.")
+    verify_sites.add_argument("--limit-companies", type=int, default=100, help="Maximum number of companies to verify.")
+    verify_sites.add_argument("--quiet", action="store_true", help="Suppress progress messages during verification.")
+
+    career_pages = subparsers.add_parser(
+        "discover-career-pages",
+        help="Stage 3: discover career page URLs from verified company homepages.",
+    )
+    career_pages.add_argument("--input-file", type=Path, help="Stage 2 company-sites JSON file.")
+    career_pages.add_argument("--output-dir", type=Path, help="Root Job Database directory.")
+    career_pages.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
+
+    verified_jobs = subparsers.add_parser(
+        "discover-verified-jobs",
+        help="Stage 4: scan verified career pages and write matched corporate jobs.",
+    )
+    verified_jobs.add_argument("--input-file", type=Path, help="Stage 3 career-pages JSON file.")
+    verified_jobs.add_argument("--seed-jobs-file", type=Path, help="Stage 1 jobs JSON file for matching context.")
+    verified_jobs.add_argument("--output-dir", type=Path, help="Root Job Database directory.")
+    verified_jobs.add_argument("--limit-pages-per-company", type=int, default=100)
+    verified_jobs.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
 
     return parser
 
@@ -145,37 +174,82 @@ def print_progress(message: str) -> None:
     print(message, flush=True)
 
 
-def run_discover_company_careers(args: argparse.Namespace) -> None:
-    result = run_company_careers_discovery(
+def run_verify_company_sites(args: argparse.Namespace) -> None:
+    result = verify_company_sites(
         input_path=args.input_file,
         output_dir=args.output_dir,
         limit_companies=args.limit_companies,
-        limit_pages_per_company=args.limit_pages_per_company,
-        allow_domain_guessing=args.allow_domain_guessing,
         progress=None if args.quiet else print_progress,
     )
 
     print(f"Input JSON path: {result.input_path}")
-    print(f"Verified output JSON path: {result.output_path}")
+    print(f"Company sites JSON path: {result.output_path}")
+    print(f"Companies reviewed: {len(result.companies)}")
+    verified = [site for site in result.companies if site.status == "VERIFIED"]
+    print(f"Verified company homepages: {len(verified)}")
+    _print_company_site_statuses(result.companies)
+
+
+def run_discover_career_pages(args: argparse.Namespace) -> None:
+    result = discover_company_career_pages(
+        input_path=args.input_file,
+        output_dir=args.output_dir,
+        progress=None if args.quiet else print_progress,
+    )
+
+    print(f"Input JSON path: {result.input_path}")
+    print(f"Career pages JSON path: {result.output_path}")
+    found = [page for page in result.career_pages if page.status == "CAREER_PAGE_FOUND"]
+    print(f"Career pages found: {len(found)}")
+    if result.career_pages:
+        print("Career page statuses:")
+        for page in result.career_pages:
+            reason = f" - {page.reason}" if page.reason else ""
+            url = page.careerPageUrl or "none"
+            print(f"  - {page.companyName}: {page.status}, url {url}{reason}")
+
+
+def run_discover_verified_jobs(args: argparse.Namespace) -> None:
+    result = discover_verified_jobs(
+        career_pages_path=args.input_file,
+        seed_jobs_path=args.seed_jobs_file,
+        output_dir=args.output_dir,
+        limit_pages_per_company=args.limit_pages_per_company,
+        progress=None if args.quiet else print_progress,
+    )
+
+    print(f"Input JSON path: {result.input_path}")
+    print(f"Verified jobs JSON path: {result.output_path}")
     print(f"Companies reviewed: {len(result.companies_reviewed)}")
     print(f"Corporate jobs added: {len(result.jobs_added)}")
-    if result.review_statuses:
+    _print_company_review_statuses(result.review_statuses)
+    _print_failed_companies(result.failed_companies)
+
+
+def _print_company_site_statuses(company_sites) -> None:
+    if company_sites:
+        print("Company site statuses:")
+        for site in company_sites:
+            reason = f" - {site.reason}" if site.reason else ""
+            url = site.homepageUrl or "none"
+            print(f"  - {site.companyName}: {site.status}, homepage {url}{reason}")
+
+
+def _print_company_review_statuses(review_statuses) -> None:
+    if review_statuses:
         print("Company review statuses:")
-        for status in result.review_statuses:
+        for status in review_statuses:
             reason = f" - {status.reason}" if status.reason else ""
             print(
                 f"  - {status.companyName}: {status.status}, "
                 f"reviewed {status.pagesReviewed} pages, found {status.jobsFound} jobs{reason}"
             )
-    manual_statuses = [status for status in result.review_statuses if status.status == "MANUAL_VERIFICATION"]
-    if manual_statuses:
-        print("Manual verification recommended:")
-        for status in manual_statuses:
-            reason = f" - {status.reason}" if status.reason else ""
-            print(f"  - {status.companyName}{reason}")
-    if result.failed_companies:
+
+
+def _print_failed_companies(failed_companies) -> None:
+    if failed_companies:
         print("Companies that failed:")
-        for company, reason in result.failed_companies.items():
+        for company, reason in failed_companies.items():
             print(f"  - {company}: {reason}")
     else:
         print("Companies that failed: none")

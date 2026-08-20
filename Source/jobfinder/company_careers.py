@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 import re
+import json
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 from jobfinder.daily_jobs import DailyJobRecord, is_relevant_remote_development_job
-from jobfinder.daily_storage import default_project_root, load_daily_jobs, merge_and_save_verified_jobs
+from jobfinder.daily_storage import (
+    COMPANY_SITE_STAGE_DIR,
+    CAREER_PAGE_STAGE_DIR,
+    JOB_BOARD_STAGE_DIR,
+    career_pages_database_path,
+    company_sites_database_path,
+    default_project_root,
+    latest_dated_database_path,
+    load_daily_jobs,
+    merge_and_save_verified_jobs,
+)
 from jobfinder.employer_exclusions import employer_exclusion_reason, is_acceptable_recruiting_agency
 from jobfinder.sources.web_boards import LinkParser, extract_json_ld_jobs, fetch_html
 
@@ -109,122 +121,291 @@ class HomepageDiscoveryResult:
     reason: str | None = None
 
 
+@dataclass(frozen=True)
+class VerifiedCompanySite:
+    companyName: str
+    homepageUrl: str | None
+    status: str
+    sourceSeed: dict[str, object]
+    reason: str | None = None
+    dateVerified: str | None = None
+
+    def to_json_dict(self, generated_on: date) -> dict[str, object]:
+        return {
+            "companyName": self.companyName,
+            "sourceSeed": self.sourceSeed,
+            "homepageUrl": self.homepageUrl,
+            "status": self.status,
+            "reason": self.reason,
+            "dateVerified": self.dateVerified or generated_on.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class VerifiedCareerPage:
+    companyName: str
+    homepageUrl: str
+    careerPageUrl: str | None
+    status: str
+    pagesReviewed: int = 0
+    reason: str | None = None
+    dateDiscovered: str | None = None
+
+    def to_json_dict(self, generated_on: date) -> dict[str, object]:
+        return {
+            "companyName": self.companyName,
+            "homepageUrl": self.homepageUrl,
+            "careerPageUrl": self.careerPageUrl,
+            "status": self.status,
+            "pagesReviewed": self.pagesReviewed,
+            "reason": self.reason,
+            "dateDiscovered": self.dateDiscovered or generated_on.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class CompanySitesResult:
+    input_path: Path
+    output_path: Path
+    companies: list[VerifiedCompanySite] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CareerPagesResult:
+    input_path: Path
+    output_path: Path
+    career_pages: list[VerifiedCareerPage] = field(default_factory=list)
+
+
 def latest_daily_database_path(output_dir: Path | None = None) -> Path:
-    directory = output_dir or default_project_root() / "Job Database"
-    files = sorted(directory.glob("jobs-*.json"), reverse=True)
-    if not files:
-        raise FileNotFoundError(f"No daily job database files found in {directory}")
-    return files[0]
+    return latest_dated_database_path("jobs", output_dir=output_dir, stage_dir=JOB_BOARD_STAGE_DIR)
+
+
+def latest_company_sites_database_path(output_dir: Path | None = None) -> Path:
+    return latest_dated_database_path("company-sites", output_dir=output_dir, stage_dir=COMPANY_SITE_STAGE_DIR)
+
+
+def latest_career_pages_database_path(output_dir: Path | None = None) -> Path:
+    return latest_dated_database_path("career-pages", output_dir=output_dir, stage_dir=CAREER_PAGE_STAGE_DIR)
+
+
+def verify_company_sites(
+    *,
+    input_path: Path | None = None,
+    output_dir: Path | None = None,
+    limit_companies: int | None = 100,
+    use_public_search: bool = True,
+    progress: ProgressCallback | None = None,
+    fetcher: HtmlFetcher = fetch_html,
+) -> CompanySitesResult:
+    source_path = input_path or latest_daily_database_path(output_dir)
+    seed_jobs = load_daily_jobs(source_path)
+    generated = _date_from_stage_path(source_path) or date.today()
+    company_sites: list[VerifiedCompanySite] = []
+
+    _report(progress, f"Company site verification input: {source_path}")
+    for seed_job in _unique_company_seed_jobs(seed_jobs, limit_companies):
+        employer_reason = employer_exclusion_reason(seed_job.companyName)
+        if employer_reason:
+            company_sites.append(
+                _company_site_record(seed_job, None, "EXCLUDED_EMPLOYER", employer_reason, generated)
+            )
+            _report(progress, f"{seed_job.companyName}: excluded employer; {employer_reason}")
+            continue
+
+        if is_acceptable_recruiting_agency(seed_job.companyName):
+            reason = "Acceptable recruiting agency; manual homepage verification is recommended."
+            company_sites.append(_company_site_record(seed_job, None, "MANUAL_VERIFICATION", reason, generated))
+            _report(progress, f"{seed_job.companyName}: manual verification recommended; {reason}")
+            continue
+
+        if not use_public_search:
+            reason = "Public homepage search is disabled; no verified homepage was produced."
+            company_sites.append(_company_site_record(seed_job, None, "NO_SEARCH_RESULTS", reason, generated))
+            _report(progress, f"{seed_job.companyName}: NO_SEARCH_RESULTS; {reason}")
+            continue
+
+        _report(progress, f"{seed_job.companyName}: locating official corporate homepage via public search.")
+        homepage_result = discover_homepage_from_search(seed_job.companyName, progress=progress, fetcher=fetcher)
+        if homepage_result.status == "SEARCH_HOMEPAGE_FOUND" and homepage_result.homepage_url:
+            company_sites.append(
+                _company_site_record(seed_job, homepage_result.homepage_url, "VERIFIED", None, generated)
+            )
+            continue
+
+        status = homepage_result.status
+        reason = homepage_result.reason or "No official company homepage was found by public search."
+        if status == "SEARCH_RESULT_UNVERIFIED":
+            status = "MANUAL_VERIFICATION"
+        company_sites.append(_company_site_record(seed_job, homepage_result.homepage_url, status, reason, generated))
+        _report(progress, f"{seed_job.companyName}: {status}; {reason}")
+
+    output_path = save_company_sites(company_sites, output_dir=output_dir, generated_on=generated)
+    _report(progress, f"Company site verification saved: {output_path}")
+    return CompanySitesResult(source_path, output_path, company_sites)
+
+
+def discover_company_career_pages(
+    *,
+    input_path: Path | None = None,
+    output_dir: Path | None = None,
+    progress: ProgressCallback | None = None,
+    fetcher: HtmlFetcher = fetch_html,
+) -> CareerPagesResult:
+    source_path = input_path or latest_company_sites_database_path(output_dir)
+    company_sites = load_company_sites(source_path)
+    generated = _date_from_stage_path(source_path) or date.today()
+    career_pages: list[VerifiedCareerPage] = []
+
+    _report(progress, f"Career page discovery input: {source_path}")
+    for company_site in company_sites:
+        if company_site.status != "VERIFIED" or not company_site.homepageUrl:
+            reason = company_site.reason or f"Company site status is {company_site.status}, not VERIFIED."
+            career_pages.append(
+                VerifiedCareerPage(
+                    company_site.companyName,
+                    company_site.homepageUrl or "",
+                    None,
+                    company_site.status,
+                    reason=reason,
+                    dateDiscovered=generated.isoformat(),
+                )
+            )
+            continue
+
+        result = discover_career_urls_from_verified_homepage(
+            company_site.companyName,
+            company_site.homepageUrl,
+            progress=progress,
+            fetcher=fetcher,
+        )
+        if result.career_urls:
+            for career_url in result.career_urls:
+                career_pages.append(
+                    VerifiedCareerPage(
+                        company_site.companyName,
+                        company_site.homepageUrl,
+                        career_url,
+                        "CAREER_PAGE_FOUND",
+                        pagesReviewed=1,
+                        dateDiscovered=generated.isoformat(),
+                    )
+                )
+            continue
+
+        career_pages.append(
+            VerifiedCareerPage(
+                company_site.companyName,
+                company_site.homepageUrl,
+                None,
+                result.status,
+                pagesReviewed=1 if result.status != "FAILED" else 0,
+                reason=result.reason,
+                dateDiscovered=generated.isoformat(),
+            )
+        )
+
+    output_path = save_career_pages(career_pages, output_dir=output_dir, generated_on=generated)
+    _report(progress, f"Career page discovery saved: {output_path}")
+    return CareerPagesResult(source_path, output_path, career_pages)
+
+
+def discover_verified_jobs(
+    *,
+    career_pages_path: Path | None = None,
+    seed_jobs_path: Path | None = None,
+    output_dir: Path | None = None,
+    limit_pages_per_company: int = 100,
+    progress: ProgressCallback | None = None,
+    fetcher: HtmlFetcher = fetch_html,
+) -> CompanyCareersResult:
+    source_path = career_pages_path or latest_career_pages_database_path(output_dir)
+    seed_path = seed_jobs_path or latest_daily_database_path(output_dir)
+    career_pages = load_career_pages(source_path)
+    seed_jobs = load_daily_jobs(seed_path)
+    seed_by_company = {job.companyName.casefold(): job for job in _unique_company_seed_jobs(seed_jobs, None)}
+    generated = _date_from_stage_path(source_path) or date.today()
+    discovered_jobs: list[DailyJobRecord] = []
+    review_statuses: list[CompanyReviewStatus] = []
+    failed_companies: dict[str, str] = {}
+
+    _report(progress, f"Verified job discovery input: {source_path}")
+    for career_page in career_pages:
+        if career_page.status != "CAREER_PAGE_FOUND" or not career_page.careerPageUrl:
+            review_statuses.append(
+                CompanyReviewStatus(career_page.companyName, career_page.status, reason=career_page.reason)
+            )
+            continue
+
+        seed_job = seed_by_company.get(career_page.companyName.casefold()) or DailyJobRecord(
+            companyName=career_page.companyName,
+            jobTitle="Software Engineer",
+            jobUrl=career_page.homepageUrl,
+            applicationUrl=career_page.homepageUrl,
+            source="Verified Company Site",
+        )
+        try:
+            scan_result = scan_company_careers(
+                seed_job,
+                [career_page.careerPageUrl],
+                limit_pages=limit_pages_per_company,
+                progress=progress,
+                fetcher=fetcher,
+            )
+        except Exception as error:  # noqa: BLE001 - one company must not stop the stage.
+            failed_companies[career_page.companyName] = str(error)
+            review_statuses.append(CompanyReviewStatus(career_page.companyName, "FAILED", reason=str(error)))
+            continue
+
+        discovered_jobs.extend(scan_result.jobs)
+        review_statuses.append(
+            CompanyReviewStatus(
+                career_page.companyName,
+                scan_result.status,
+                pagesReviewed=scan_result.pages_reviewed,
+                jobsFound=len(scan_result.jobs),
+                reason=scan_result.reason,
+            )
+        )
+
+    output_path = merge_and_save_verified_jobs(discovered_jobs, output_dir=output_dir, generated_on=generated)
+    _report(progress, f"Verified job discovery saved: {output_path}")
+    return CompanyCareersResult(source_path, output_path, list({page.companyName for page in career_pages}), discovered_jobs, failed_companies, review_statuses)
 
 
 def run_company_careers_discovery(
     *,
     input_path: Path | None = None,
     output_dir: Path | None = None,
-    limit_companies: int | None = None,
-    limit_pages_per_company: int = 25,
+    limit_companies: int | None = 100,
+    limit_pages_per_company: int = 100,
     allow_domain_guessing: bool = True,
     progress: ProgressCallback | None = None,
     fetcher: HtmlFetcher = fetch_html,
 ) -> CompanyCareersResult:
-    source_path = input_path or latest_daily_database_path(output_dir)
-    seed_jobs = load_daily_jobs(source_path)
-    companies_reviewed: list[str] = []
-    failed_companies: dict[str, str] = {}
-    discovered_jobs: list[DailyJobRecord] = []
-    review_statuses: list[CompanyReviewStatus] = []
-
-    _report(progress, f"Company careers discovery input: {source_path}")
-    for seed_job in _unique_company_seed_jobs(seed_jobs, limit_companies):
-        companies_reviewed.append(seed_job.companyName)
-        employer_reason = employer_exclusion_reason(seed_job.companyName)
-        if employer_reason:
-            review_statuses.append(CompanyReviewStatus(seed_job.companyName, "EXCLUDED_EMPLOYER", reason=employer_reason))
-            _report(progress, f"{seed_job.companyName}: excluded employer; {employer_reason}")
-            continue
-
-        _report(progress, f"{seed_job.companyName}: locating corporate career pages.")
-        entry_urls = career_entry_urls(seed_job, allow_domain_guessing=allow_domain_guessing)
-        if not entry_urls:
-            if allow_domain_guessing:
-                search_result = discover_career_urls_from_search(seed_job.companyName, progress=progress, fetcher=fetcher)
-                if search_result.career_urls:
-                    entry_urls = search_result.career_urls
-
-            if not entry_urls and allow_domain_guessing:
-                homepage_result = discover_career_urls_from_homepage(seed_job.companyName, progress=progress, fetcher=fetcher)
-                if homepage_result.career_urls:
-                    entry_urls = homepage_result.career_urls
-                else:
-                    status = homepage_result.status
-                    reason = homepage_result.reason or "No corporate careers URL could be derived from the company homepage."
-                    if is_acceptable_recruiting_agency(seed_job.companyName):
-                        status = "MANUAL_VERIFICATION"
-                        reason = (
-                            "Acceptable recruiting agency; no corporate careers URL was found, "
-                            "so manual verification is recommended."
-                        )
-                    review_statuses.append(CompanyReviewStatus(seed_job.companyName, status, reason=reason))
-                    _report(progress, f"{seed_job.companyName}: {status}; {reason}")
-                    continue
-
-        if not entry_urls:
-            reason = "No corporate or ATS career URL could be derived."
-            if is_acceptable_recruiting_agency(seed_job.companyName):
-                reason = "Acceptable recruiting agency; no careers URL was derived, so manual verification is recommended."
-                review_statuses.append(CompanyReviewStatus(seed_job.companyName, "MANUAL_VERIFICATION", reason=reason))
-                _report(progress, f"{seed_job.companyName}: manual verification recommended; {reason}")
-                continue
-            failed_companies[seed_job.companyName] = reason
-            review_statuses.append(CompanyReviewStatus(seed_job.companyName, "NO_ENTRY_URL", reason=reason))
-            _report(progress, f"{seed_job.companyName}: no corporate or ATS career URL derived.")
-            continue
-
-        try:
-            company_result = scan_company_careers(
-                seed_job,
-                entry_urls,
-                limit_pages=limit_pages_per_company,
-                progress=progress,
-                fetcher=fetcher,
-            )
-        except Exception as error:  # noqa: BLE001 - one company must not stop the whole company-careers job.
-            failed_companies[seed_job.companyName] = str(error)
-            review_statuses.append(CompanyReviewStatus(seed_job.companyName, "FAILED", reason=str(error)))
-            _report(progress, f"{seed_job.companyName}: failed: {error}")
-            continue
-
-        company_jobs = company_result.jobs
-        review_statuses.append(
-            CompanyReviewStatus(
-                seed_job.companyName,
-                company_result.status,
-                pagesReviewed=company_result.pages_reviewed,
-                jobsFound=len(company_jobs),
-                reason=company_result.reason,
-            )
-        )
-        _report(
-            progress,
-            f"{seed_job.companyName}: {company_result.status}; reviewed {company_result.pages_reviewed} pages; "
-            f"found {len(company_jobs)} matching corporate jobs.",
-        )
-        discovered_jobs.extend(company_jobs)
-
-    output_path = merge_and_save_verified_jobs(
-        discovered_jobs,
+    if not allow_domain_guessing:
+        _report(progress, "Public homepage search is disabled; downstream company-career stages may produce no matches.")
+    company_sites = verify_company_sites(
+        input_path=input_path,
         output_dir=output_dir,
-        generated_on=_date_from_daily_path(source_path),
+        limit_companies=limit_companies,
+        use_public_search=allow_domain_guessing,
+        progress=progress,
+        fetcher=fetcher,
     )
-    _report(progress, f"Company careers discovery saved: {output_path}")
-
-    return CompanyCareersResult(
-        input_path=source_path,
-        output_path=output_path,
-        companies_reviewed=companies_reviewed,
-        jobs_added=discovered_jobs,
-        failed_companies=failed_companies,
-        review_statuses=review_statuses,
+    career_pages = discover_company_career_pages(
+        input_path=company_sites.output_path,
+        output_dir=output_dir,
+        progress=progress,
+        fetcher=fetcher,
+    )
+    return discover_verified_jobs(
+        career_pages_path=career_pages.output_path,
+        seed_jobs_path=company_sites.input_path,
+        output_dir=output_dir,
+        limit_pages_per_company=limit_pages_per_company,
+        progress=progress,
+        fetcher=fetcher,
     )
 
 
@@ -350,37 +531,85 @@ def discover_career_urls_from_homepage(
     )
 
 
-def discover_career_urls_from_search(
+def discover_homepage_from_search(
     company_name: str,
     *,
     progress: ProgressCallback | None = None,
     fetcher: HtmlFetcher = fetch_html,
 ) -> HomepageDiscoveryResult:
+    unverified_homepages: list[str] = []
     for search_url in company_search_urls(company_name):
         try:
-            _report(progress, f"{company_name}: searching public web for careers page.")
+            _report(progress, f"{company_name}: searching public web for official homepage.")
             search_html = fetcher(search_url)
         except Exception:
             continue
 
-        career_urls = [
-            url
+        homepage_urls = [
+            _homepage_url(url)
             for link in LinkParser.collect(search_html, search_url)
             if (url := _unwrap_search_result_url(link.href))
             and _is_probable_official_company_url(company_name, url)
-            and (_is_career_link(url) or _has_career_link_text(link.text))
         ]
-        career_urls = _dedupe_urls(career_urls)
-        if career_urls:
-            _report(progress, f"{company_name}: found {len(career_urls)} career links from public search.")
-            return HomepageDiscoveryResult("SEARCH_CAREERS_FOUND", search_url, career_urls)
+        for homepage_url in _dedupe_urls(homepage_urls):
+            try:
+                fetcher(homepage_url)
+            except Exception:
+                unverified_homepages.append(homepage_url)
+                continue
+            _report(progress, f"{company_name}: verified corporate homepage {homepage_url}.")
+            return HomepageDiscoveryResult("SEARCH_HOMEPAGE_FOUND", homepage_url=homepage_url)
 
-    return HomepageDiscoveryResult("NO_SEARCH_RESULTS", reason="No official company career links were found in public search results.")
+    if unverified_homepages:
+        return HomepageDiscoveryResult(
+            "SEARCH_RESULT_UNVERIFIED",
+            homepage_url=unverified_homepages[0],
+            reason=(
+                "Public search found possible official homepage candidates, but the background fetch could not "
+                f"verify them: {', '.join(_dedupe_urls(unverified_homepages))}"
+            ),
+        )
+
+    return HomepageDiscoveryResult("NO_SEARCH_RESULTS", reason="No official company homepage was found in public search results.")
+
+
+def discover_career_urls_from_verified_homepage(
+    company_name: str,
+    homepage_url: str,
+    *,
+    progress: ProgressCallback | None = None,
+    fetcher: HtmlFetcher = fetch_html,
+) -> HomepageDiscoveryResult:
+    try:
+        _report(progress, f"{company_name}: scanning verified homepage for careers links.")
+        page_html = fetcher(homepage_url)
+    except Exception as error:
+        return HomepageDiscoveryResult("FAILED", homepage_url=homepage_url, reason=str(error))
+
+    career_urls = [
+        link.href
+        for link in LinkParser.collect(page_html, homepage_url)
+        if _is_career_link(link.href) or _has_career_link_text(link.text)
+    ]
+    career_urls = _dedupe_urls(career_urls)
+    if career_urls:
+        _report(progress, f"{company_name}: found {len(career_urls)} career links on verified homepage.")
+        return HomepageDiscoveryResult("HOMEPAGE_CAREERS_FOUND", homepage_url, career_urls)
+
+    return HomepageDiscoveryResult(
+        "HOMEPAGE_FOUND_NO_CAREER_LINKS",
+        homepage_url,
+        reason=f"Corporate homepage was verified at {homepage_url}, but no career-like links were detected.",
+    )
 
 
 def company_search_urls(company_name: str) -> list[str]:
-    queries = [f"{company_name} careers", f"{company_name} jobs", f"{company_name} open positions"]
-    return ["https://duckduckgo.com/html/?" + urlencode({"q": query}) for query in queries]
+    queries = [company_name, f"{company_name} official site", f"{company_name} company"]
+    urls: list[str] = []
+    for query in queries:
+        urls.append("https://duckduckgo.com/html/?" + urlencode({"q": query}))
+        urls.append("https://www.bing.com/search?" + urlencode({"q": query}))
+    return urls
 
 
 def company_homepage_candidates(company_name: str) -> list[str]:
@@ -392,6 +621,135 @@ def company_homepage_candidates(company_name: str) -> list[str]:
         urls.append(f"https://{slug}.{tld}")
         urls.append(f"https://www.{slug}.{tld}")
     return urls
+
+
+def save_company_sites(
+    company_sites: list[VerifiedCompanySite],
+    *,
+    output_dir: Path | None = None,
+    generated_on: date | None = None,
+) -> Path:
+    generated = generated_on or date.today()
+    output_path = company_sites_database_path(output_dir=output_dir, generated_on=generated)
+    existing = load_company_sites(output_path)
+    merged = _merge_company_sites(existing + company_sites)
+    payload = {
+        "generatedDate": generated.isoformat(),
+        "companies": [site.to_json_dict(generated) for site in merged],
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return output_path
+
+
+def load_company_sites(path: Path) -> list[VerifiedCompanySite]:
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    records = payload.get("companies", [])
+    if not isinstance(records, list):
+        raise ValueError(f"Expected 'companies' to be a list in {path}")
+    return [_company_site_from_json(item) for item in records if isinstance(item, dict)]
+
+
+def save_career_pages(
+    career_pages: list[VerifiedCareerPage],
+    *,
+    output_dir: Path | None = None,
+    generated_on: date | None = None,
+) -> Path:
+    generated = generated_on or date.today()
+    output_path = career_pages_database_path(output_dir=output_dir, generated_on=generated)
+    existing = load_career_pages(output_path)
+    merged = _merge_career_pages(existing + career_pages)
+    payload = {
+        "generatedDate": generated.isoformat(),
+        "careerPages": [page.to_json_dict(generated) for page in merged],
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return output_path
+
+
+def load_career_pages(path: Path) -> list[VerifiedCareerPage]:
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    records = payload.get("careerPages", [])
+    if not isinstance(records, list):
+        raise ValueError(f"Expected 'careerPages' to be a list in {path}")
+    return [_career_page_from_json(item) for item in records if isinstance(item, dict)]
+
+
+def _company_site_record(
+    seed_job: DailyJobRecord,
+    homepage_url: str | None,
+    status: str,
+    reason: str | None,
+    generated_on: date,
+) -> VerifiedCompanySite:
+    return VerifiedCompanySite(
+        companyName=seed_job.companyName,
+        homepageUrl=homepage_url,
+        status=status,
+        sourceSeed=seed_job.normalized(generated_on).to_json_dict(),
+        reason=reason,
+        dateVerified=generated_on.isoformat(),
+    )
+
+
+def _merge_company_sites(company_sites: list[VerifiedCompanySite]) -> list[VerifiedCompanySite]:
+    merged: dict[str, VerifiedCompanySite] = {}
+    for company_site in company_sites:
+        key = company_site.companyName.casefold()
+        existing = merged.get(key)
+        if existing is None or _company_site_score(company_site) >= _company_site_score(existing):
+            merged[key] = company_site
+    return sorted(merged.values(), key=lambda item: item.companyName.lower())
+
+
+def _merge_career_pages(career_pages: list[VerifiedCareerPage]) -> list[VerifiedCareerPage]:
+    merged: dict[tuple[str, str], VerifiedCareerPage] = {}
+    for career_page in career_pages:
+        key = (career_page.companyName.casefold(), career_page.careerPageUrl or career_page.status)
+        existing = merged.get(key)
+        if existing is None or _career_page_score(career_page) >= _career_page_score(existing):
+            merged[key] = career_page
+    return sorted(merged.values(), key=lambda item: (item.companyName.lower(), item.careerPageUrl or ""))
+
+
+def _company_site_score(company_site: VerifiedCompanySite) -> int:
+    scores = {"VERIFIED": 4, "MANUAL_VERIFICATION": 3, "SEARCH_RESULT_UNVERIFIED": 2}
+    return scores.get(company_site.status, 1)
+
+
+def _career_page_score(career_page: VerifiedCareerPage) -> int:
+    scores = {"CAREER_PAGE_FOUND": 4, "HOMEPAGE_CAREERS_FOUND": 3, "POSSIBLE_JS_PAGINATION": 2}
+    return scores.get(career_page.status, 1)
+
+
+def _company_site_from_json(item: dict[str, object]) -> VerifiedCompanySite:
+    source_seed = item.get("sourceSeed")
+    return VerifiedCompanySite(
+        companyName=str(item.get("companyName") or ""),
+        sourceSeed=source_seed if isinstance(source_seed, dict) else {},
+        homepageUrl=_optional_string(item.get("homepageUrl")),
+        status=str(item.get("status") or "FAILED"),
+        reason=_optional_string(item.get("reason")),
+        dateVerified=_optional_string(item.get("dateVerified")),
+    )
+
+
+def _career_page_from_json(item: dict[str, object]) -> VerifiedCareerPage:
+    return VerifiedCareerPage(
+        companyName=str(item.get("companyName") or ""),
+        homepageUrl=str(item.get("homepageUrl") or ""),
+        careerPageUrl=_optional_string(item.get("careerPageUrl")),
+        status=str(item.get("status") or "FAILED"),
+        pagesReviewed=_int_or_default(item.get("pagesReviewed"), 0),
+        reason=_optional_string(item.get("reason")),
+        dateDiscovered=_optional_string(item.get("dateDiscovered")),
+    )
 
 
 def _unique_company_seed_jobs(jobs: list[DailyJobRecord], limit: int | None) -> list[DailyJobRecord]:
@@ -495,6 +853,11 @@ def _unwrap_search_result_url(url: str) -> str | None:
     return None
 
 
+def _homepage_url(url: str) -> str:
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 def _is_probable_official_company_url(company_name: str, url: str) -> bool:
     host = _host(url)
     slug = _company_slug(company_name)
@@ -535,13 +898,28 @@ def _company_slug(company_name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value)
 
 
-def _date_from_daily_path(path: Path):
-    match = re.search(r"jobs-(\d{4}-\d{2}-\d{2})\.json$", path.name)
+def _date_from_stage_path(path: Path) -> date | None:
+    match = re.search(r"-(\d{4}-\d{2}-\d{2})\.json$", path.name)
     if not match:
         return None
-    from datetime import date
 
     return date.fromisoformat(match.group(1))
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _int_or_default(value: object, default: int) -> int:
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def _is_job_board_host(url: str) -> bool:
