@@ -10,6 +10,8 @@ from jobfinder.company_careers import (
 )
 from jobfinder.discovery import run_daily_discovery
 from jobfinder.filters import JobFilter, filter_jobs
+from jobfinder.job_board_site_lists import move_site_to_auth_required
+from jobfinder.job_board_site_lists import load_auth_required_sites, load_no_auth_sites
 from jobfinder.models import JobPosting
 from jobfinder.sources import RemotiveSource
 from jobfinder.sources.base import JobSource
@@ -25,7 +27,11 @@ def main() -> None:
         return
 
     if args.command in {"discover-daily", "discover-job-boards"}:
-        run_discover_daily(args)
+        run_discover_daily(args, board_sites=load_no_auth_sites(), update_auth_lists=True)
+        return
+
+    if args.command == "discover-job-boards-auth":
+        run_discover_job_boards_auth(args)
         return
 
     if args.command == "verify-company-sites":
@@ -74,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
     discover_alias = subparsers.add_parser(
         "discover-job-boards",
-        help="Alias for discover-daily; writes stage 1 job-board results.",
+        help="Scan no-auth job boards listed in Documentation/job-board-sites-no-auth.md.",
     )
     discover_alias.add_argument("--output-dir", type=Path, help="Root Job Database directory.")
     discover_alias.add_argument("--limit-per-query", type=int, default=100)
@@ -84,6 +90,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Record login-required sites and continue to later sources instead of stopping.",
     )
     discover_alias.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
+
+    discover_auth = subparsers.add_parser(
+        "discover-job-boards-auth",
+        help="Print browser-session checkpoints for auth-required job boards.",
+    )
+    discover_auth.add_argument(
+        "--continue-after-auth-checkpoint",
+        action="store_true",
+        help="Print checkpoints for every auth-required site instead of only the first.",
+    )
+    discover_auth.add_argument("--quiet", action="store_true", help="Suppress progress messages during discovery.")
 
     verify_sites = subparsers.add_parser(
         "verify-company-sites",
@@ -145,21 +162,33 @@ def build_source(name: str) -> JobSource:
     raise ValueError(f"Unsupported source: {name}")
 
 
-def run_discover_daily(args: argparse.Namespace) -> None:
+def run_discover_daily(args: argparse.Namespace, *, board_sites=None, update_auth_lists: bool = True) -> None:
+    source_names = [site.name for site in board_sites] if board_sites is not None else None
+    site_urls = {site.name: site.url for site in board_sites or []}
     result = run_daily_discovery(
         output_dir=args.output_dir,
         limit_per_query=args.limit_per_query,
+        source_names=source_names,
         stop_on_authentication_required=not args.continue_after_auth_checkpoint,
         progress=None if args.quiet else print_progress,
     )
 
+    if update_auth_lists and result.authentication_required_sites:
+        for site in result.authentication_required_sites:
+            move_site_to_auth_required(site)
+
     if result.authentication_required_sites and not args.continue_after_auth_checkpoint:
         site = result.authentication_required_sites[0]
-        print(f"LOGIN REQUIRED: {site}. Please log in using the browser and tell me when authentication is complete.")
+        print_browser_login_checkpoint(site, site_urls.get(site))
         return
 
     print(f"Sites successfully scanned: {', '.join(result.scanned_sites) or 'none'}")
     print(f"Sites requiring authentication: {', '.join(result.authentication_required_sites) or 'none'}")
+    if result.authentication_required_sites:
+        print("Browser-login follow-up required:")
+        for site in result.authentication_required_sites:
+            url = f" ({site_urls[site]})" if site_urls.get(site) else ""
+            print(f"  - {site}{url}: log in manually in the browser before requesting a browser-session scan.")
     if result.failed_sites:
         print("Sites that failed:")
         for site, reason in result.failed_sites.items():
@@ -172,6 +201,31 @@ def run_discover_daily(args: argparse.Namespace) -> None:
 
 def print_progress(message: str) -> None:
     print(message, flush=True)
+
+
+def run_discover_job_boards_auth(args: argparse.Namespace) -> None:
+    sites = load_auth_required_sites()
+    if not sites:
+        print("No auth-required job boards are listed in Documentation\\job-board-sites-auth.md.")
+        return
+
+    selected_sites = sites if args.continue_after_auth_checkpoint else sites[:1]
+    for site in selected_sites:
+        print_browser_login_checkpoint(site.name, site.url, results_saved=False)
+
+    if not args.continue_after_auth_checkpoint and len(sites) > 1:
+        print("Run with --continue-after-auth-checkpoint to print checkpoints for all auth-required sites.")
+
+
+def print_browser_login_checkpoint(site: str, url: str | None = None, *, results_saved: bool = True) -> None:
+    print(f"BROWSER LOGIN REQUIRED: {site}.")
+    if url:
+        print(f"Open: {url}")
+    if results_saved:
+        print("Accessible results collected so far have been saved.")
+    print("Ask the Cursor agent to open this URL in the Cursor browser.")
+    print("Log in manually, then tell the agent authentication is complete so it can use the open browser session read-only.")
+    print("Do not provide credentials to the agent; credentials, cookies, tokens, and session data are not stored.")
 
 
 def run_verify_company_sites(args: argparse.Namespace) -> None:

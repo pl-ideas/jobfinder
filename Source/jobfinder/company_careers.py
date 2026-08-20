@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import json
+import base64
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -540,19 +541,30 @@ def discover_homepage_from_search(
     unverified_homepages: list[str] = []
     for search_url in company_search_urls(company_name):
         try:
-            _report(progress, f"{company_name}: searching public web for official homepage.")
+            _report(progress, f"{company_name}: searching {_search_url_description(search_url)}.")
             search_html = fetcher(search_url)
         except Exception:
+            _report(progress, f"{company_name}: search request failed for {_search_url_description(search_url)}.")
             continue
 
-        homepage_urls = [
-            _homepage_url(url)
-            for link in LinkParser.collect(search_html, search_url)
-            if (url := _unwrap_search_result_url(link.href))
-            and _is_probable_official_company_url(company_name, url)
-        ]
+        homepage_urls: list[str] = []
+        reviewed_links = 0
+        for link in LinkParser.collect(search_html, search_url):
+            url = _unwrap_search_result_url(link.href)
+            if not url:
+                continue
+            reviewed_links += 1
+            if _is_probable_official_company_url(company_name, url):
+                homepage_urls.append(_homepage_url(url))
+
+        _report(
+            progress,
+            f"{company_name}: reviewed {reviewed_links} search result links; "
+            f"found {len(_dedupe_urls(homepage_urls))} official homepage candidates.",
+        )
         for homepage_url in _dedupe_urls(homepage_urls):
             try:
+                _report(progress, f"{company_name}: verifying homepage candidate {homepage_url}.")
                 fetcher(homepage_url)
             except Exception:
                 unverified_homepages.append(homepage_url)
@@ -605,11 +617,7 @@ def discover_career_urls_from_verified_homepage(
 
 def company_search_urls(company_name: str) -> list[str]:
     queries = [company_name, f"{company_name} official site", f"{company_name} company"]
-    urls: list[str] = []
-    for query in queries:
-        urls.append("https://duckduckgo.com/html/?" + urlencode({"q": query}))
-        urls.append("https://www.bing.com/search?" + urlencode({"q": query}))
-    return urls
+    return ["https://www.bing.com/search?" + urlencode({"q": query}) for query in queries]
 
 
 def company_homepage_candidates(company_name: str) -> list[str]:
@@ -848,14 +856,32 @@ def _unwrap_search_result_url(url: str) -> str | None:
     query = parse_qs(parsed.query)
     if "uddg" in query:
         return query["uddg"][0]
+    if parsed.netloc.endswith("bing.com") and "u" in query:
+        return _decode_bing_redirect_url(query["u"][0])
     if parsed.scheme in {"http", "https"}:
         return url
     return None
 
 
+def _decode_bing_redirect_url(value: str) -> str | None:
+    encoded = value[2:] if value.startswith("a1") else value
+    padding = "=" * (-len(encoded) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(encoded + padding).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return decoded if decoded.startswith(("http://", "https://")) else None
+
+
 def _homepage_url(url: str) -> str:
     parsed = urlparse(url)
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _search_url_description(url: str) -> str:
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query).get("q", [""])[0]
+    return f"{parsed.netloc} query \"{query}\""
 
 
 def _is_probable_official_company_url(company_name: str, url: str) -> bool:
@@ -864,7 +890,26 @@ def _is_probable_official_company_url(company_name: str, url: str) -> bool:
     if not slug or any(marker in host for marker in SEARCH_RESULT_EXCLUDED_HOST_MARKERS):
         return False
     compact_host = re.sub(r"[^a-z0-9]+", "", host)
-    return slug in compact_host or compact_host in slug
+    if slug in compact_host or compact_host in slug:
+        return True
+
+    return any(token in compact_host for token in _company_match_tokens(company_name))
+
+
+def _company_match_tokens(company_name: str) -> tuple[str, ...]:
+    ignored = {
+        "and",
+        "company",
+        "corporation",
+        "corp",
+        "inc",
+        "insurance",
+        "llc",
+        "ltd",
+        "the",
+    }
+    tokens = [token for token in re.findall(r"[a-z0-9]+", company_name.lower()) if token not in ignored]
+    return tuple(token for token in tokens if len(token) >= 5)
 
 
 def _has_possible_js_pagination(page_html: str) -> bool:

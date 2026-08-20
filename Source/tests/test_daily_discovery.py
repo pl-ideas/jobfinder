@@ -34,6 +34,7 @@ from jobfinder.daily_storage import daily_database_path, merge_and_save_daily_jo
 from jobfinder.discovery import run_daily_discovery
 from jobfinder.employer_exclusions import is_acceptable_recruiting_agency, is_excluded_employer
 from jobfinder.job_ranking import RankingProfile, rank_job_text
+from jobfinder.job_board_site_lists import load_auth_required_sites, load_no_auth_sites, move_site_to_auth_required
 from jobfinder.skill_matching import SkillProfile, evaluate_job_skills
 from jobfinder.sources.web_boards import SourceScanResult, extract_json_ld_jobs
 
@@ -473,6 +474,118 @@ class DailyDiscoveryTests(unittest.TestCase):
         self.assertTrue(any(message.startswith("Output target:") for message in messages))
         self.assertTrue(any(message == "After dedupe: 1 unique jobs." for message in messages))
 
+    def test_source_names_limit_discovery_to_selected_sources(self) -> None:
+        sources = [
+            FakeSource("Built In", [sample_job("Built In")]),
+            FakeSource("Dice", [sample_job("Dice", company="Dice Co")]),
+            FakeSource("Indeed", [sample_job("Indeed", company="Indeed Co")]),
+        ]
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch("jobfinder.discovery.default_sources", return_value=sources):
+                result = run_daily_discovery(
+                    output_dir=Path(temporary_directory) / "Job Database",
+                    generated_on=date(2026, 8, 19),
+                    source_names=["Built In", "Dice"],
+                )
+
+        self.assertEqual(result.scanned_sites, ["Built In", "Dice"])
+        self.assertEqual({job.source for job in result.jobs}, {"Built In", "Dice"})
+
+
+class JobBoardSiteListTests(unittest.TestCase):
+    def test_auth_required_site_moves_from_no_auth_list_to_auth_list(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            documentation_dir = Path(temporary_directory) / "Documentation"
+            documentation_dir.mkdir()
+            no_auth_path = documentation_dir / "job-board-sites-no-auth.md"
+            auth_path = documentation_dir / "job-board-sites-auth.md"
+            no_auth_path.write_text(
+                "\n".join(
+                    [
+                        "# No-Auth Job Board Sites",
+                        "",
+                        "## Active Sites",
+                        "",
+                        "* Indeed | <https://www.indeed.com/> | Huge volume; useful for discovery, but verify listings.",
+                        "* Dice | <https://www.dice.com/jobs> | Strong fit for .NET, cloud and enterprise engineering.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            auth_path.write_text(
+                "\n".join(
+                    [
+                        "# Auth-Required Job Board Sites",
+                        "",
+                        "## Active Sites",
+                        "",
+                        "None yet. Sites are moved here automatically when `discover-job-boards` detects that background scanning requires authentication.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = move_site_to_auth_required("Indeed", documentation_dir=documentation_dir)
+            no_auth_text = no_auth_path.read_text(encoding="utf-8")
+            auth_text = auth_path.read_text(encoding="utf-8")
+
+        self.assertTrue(result.moved)
+        self.assertNotIn("* Indeed", no_auth_text)
+        self.assertIn("* Dice", no_auth_text)
+        self.assertIn("* Indeed | <https://www.indeed.com/> | Huge volume; useful for discovery, but verify listings.", auth_text)
+        self.assertNotIn("None yet.", auth_text)
+
+    def test_load_no_auth_sites_reads_name_url_and_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            documentation_dir = Path(temporary_directory) / "Documentation"
+            documentation_dir.mkdir()
+            (documentation_dir / "job-board-sites-no-auth.md").write_text(
+                "\n".join(
+                    [
+                        "# No-Auth Job Board Sites",
+                        "",
+                        "## Active Sites",
+                        "",
+                        "* Built In | <https://builtin.com/jobs> | Excellent technology-company coverage.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            sites = load_no_auth_sites(documentation_dir=documentation_dir)
+
+        self.assertEqual(sites[0].name, "Built In")
+        self.assertEqual(sites[0].url, "https://builtin.com/jobs")
+        self.assertEqual(sites[0].notes, "Excellent technology-company coverage.")
+
+    def test_load_auth_required_sites_reads_name_url_and_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            documentation_dir = Path(temporary_directory) / "Documentation"
+            documentation_dir.mkdir()
+            (documentation_dir / "job-board-sites-auth.md").write_text(
+                "\n".join(
+                    [
+                        "# Auth-Required Job Board Sites",
+                        "",
+                        "## Active Sites",
+                        "",
+                        "* Indeed | <https://www.indeed.com/> | Huge volume; useful for discovery, but verify listings.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            sites = load_auth_required_sites(documentation_dir=documentation_dir)
+
+        self.assertEqual(sites[0].name, "Indeed")
+        self.assertEqual(sites[0].url, "https://www.indeed.com/")
+        self.assertEqual(sites[0].notes, "Huge volume; useful for discovery, but verify listings.")
+
 
 class CompanyCareersTests(unittest.TestCase):
     def test_latest_daily_database_path_uses_newest_date(self) -> None:
@@ -563,10 +676,40 @@ class CompanyCareersTests(unittest.TestCase):
         self.assertEqual(result.status, "SEARCH_HOMEPAGE_FOUND")
         self.assertEqual(result.homepage_url, "https://www.citadelsecurities.com")
 
-    def test_public_search_uses_later_provider_when_first_provider_fails(self) -> None:
+    def test_public_search_matches_official_domain_when_company_name_has_extra_terms(self) -> None:
+        search_url = company_search_urls("Allstate Insurance Company")[0]
+        pages = {
+            search_url: '<html><a href="https://www.allstate.com/">Allstate</a></html>',
+            "https://www.allstate.com": "<html>Allstate homepage</html>",
+        }
+
+        result = discover_homepage_from_search("Allstate Insurance Company", fetcher=lambda url: pages[url])
+
+        self.assertEqual(result.status, "SEARCH_HOMEPAGE_FOUND")
+        self.assertEqual(result.homepage_url, "https://www.allstate.com")
+
+    def test_public_search_uses_later_bing_query_when_first_query_fails(self) -> None:
         bing_url = company_search_urls("Affirm")[1]
         pages = {
             bing_url: '<html><a href="https://www.affirm.com">Affirm</a></html>',
+            "https://www.affirm.com": "<html>Affirm homepage</html>",
+        }
+
+        result = discover_homepage_from_search("Affirm", fetcher=lambda url: pages[url])
+
+        self.assertEqual(result.status, "SEARCH_HOMEPAGE_FOUND")
+        self.assertEqual(result.homepage_url, "https://www.affirm.com")
+
+    def test_public_search_decodes_bing_redirect_url(self) -> None:
+        bing_url = company_search_urls("Affirm")[1]
+        pages = {
+            bing_url: """
+                <html>
+                  <a href="https://www.bing.com/ck/a?!&&u=a1aHR0cHM6Ly93d3cuYWZmaXJtLmNvbS8&ntb=1">
+                    Affirm | Pay over time
+                  </a>
+                </html>
+            """,
             "https://www.affirm.com": "<html>Affirm homepage</html>",
         }
 
@@ -687,7 +830,7 @@ class CompanyCareersTests(unittest.TestCase):
         self.assertEqual(result.review_statuses[0].status, "NO_SEARCH_RESULTS")
         self.assertEqual(len(result.jobs_added), 0)
         self.assertTrue(requested_urls)
-        self.assertTrue(all("duckduckgo.com" in url or "bing.com" in url for url in requested_urls))
+        self.assertTrue(all("bing.com" in url for url in requested_urls))
         self.assertFalse(any("cashapp.com" in url for url in requested_urls))
 
     def test_company_careers_discovery_uses_public_search_career_link(self) -> None:

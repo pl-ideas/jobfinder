@@ -12,11 +12,11 @@ The goal is to save more direct company career URLs that can be used later for m
 
 The stages are:
 
-1. `verify-company-sites` reads `Job Database\01-job-board-results\jobs.json`, extracts unique companies, searches multiple public search result pages for official company homepages, verifies returned homepage URLs, and writes `Job Database\02-verified-company-sites\company-sites.json`.
+1. `verify-company-sites` reads `Job Database\01-job-board-results\jobs.json`, extracts unique companies, searches Bing result pages for official company homepages, verifies returned homepage URLs, and writes `Job Database\02-verified-company-sites\company-sites.json`.
 2. `discover-career-pages` reads verified company homepages, scans them for careers/job links, and writes `Job Database\03-verified-career-pages\career-pages.json`.
 3. `discover-verified-jobs` reads verified career pages, follows job-search form actions, pagination links, and relevant role/category links up to `--limit-pages-per-company`, reuses the job relevance, skill/exclusion, remote, and ranking logic, and writes `Job Database\04-matched-company-jobs\verified-jobs.json`.
 
-Stage 2 does not guess domains such as `{company}.com`; it only uses public search results and verifies the returned official homepage. The source job-board file is used as input and is not rewritten by downstream stages. Each stage has one stable output file. If the output file already exists, new results are merged into it and deduplicated.
+Stage 2 does not guess domains such as `{company}.com`; it only uses Bing search results and verifies the returned official homepage. The source job-board file is used as input and is not rewritten by downstream stages. Each stage has one stable output file. If the output file already exists, new results are merged into it and deduplicated.
 
 ## Review Statuses
 

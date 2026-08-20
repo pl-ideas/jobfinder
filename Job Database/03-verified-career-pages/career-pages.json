@@ -1,4 +1,446 @@
 {
   "generatedDate": "2026-08-19",
-  "careerPages": []
+  "careerPages": [
+    {
+      "companyName": "Acunor Infotech",
+      "homepageUrl": "https://www.acunor.com",
+      "careerPageUrl": "https://www.acunor.com/jobs",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Affirm",
+      "homepageUrl": "https://www.affirm.com",
+      "careerPageUrl": "https://www.affirm.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "AIT Global, Inc.",
+      "homepageUrl": "https://aitglobalinc.com",
+      "careerPageUrl": "https://aitglobalinc.com/careers/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Allstate Insurance Company",
+      "homepageUrl": "https://www.allstate.com",
+      "careerPageUrl": "https://www.allstate.jobs/job-search-results/?category[]=Technology",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Apex Systems",
+      "homepageUrl": "https://www.apexsystems.com/",
+      "careerPageUrl": "https://www.apexsystems.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "ARB Interactive",
+      "homepageUrl": "https://www.arbinteractive.com",
+      "careerPageUrl": "https://www.arbinteractive.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Atlassian",
+      "homepageUrl": "https://www.atlassian.com",
+      "careerPageUrl": "https://www.atlassian.com/company/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Blenderbox",
+      "homepageUrl": "https://blenderbox.com/",
+      "careerPageUrl": "https://blenderbox.breezy.hr/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Bloomerang",
+      "homepageUrl": "https://bloomerang.com",
+      "careerPageUrl": "https://bloomerang.com/company/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Calliere",
+      "homepageUrl": "https://callieregroup.com/",
+      "careerPageUrl": "https://callieregroup.zohorecruit.com/jobs/Careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Cash App",
+      "homepageUrl": "https://cash.app",
+      "careerPageUrl": "https://cash.app/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Cedar",
+      "homepageUrl": "https://www.cedar.com",
+      "careerPageUrl": "https://www.cedar.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Cedar",
+      "homepageUrl": "https://www.cedar.com",
+      "careerPageUrl": "https://www.cedar.com/careers/open-roles",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Celara",
+      "homepageUrl": "https://celaralabs.com/",
+      "careerPageUrl": "https://allyhire.work/careers/celara",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "ClassDojo",
+      "homepageUrl": "https://www.classdojo.com",
+      "careerPageUrl": "https://www.classdojo.com/jobs/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Cloud Campaign",
+      "homepageUrl": "https://www.cloudcampaign.com",
+      "careerPageUrl": "https://www.cloudcampaign.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Corporate Central Credit Union",
+      "homepageUrl": "https://corpcu.com/",
+      "careerPageUrl": "https://recruiting.paylocity.com/Recruiting/Jobs/Details/3664033",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Cranium AI",
+      "homepageUrl": "https://cranium.ai",
+      "careerPageUrl": "https://cranium.ai/company/careers/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Deepgram",
+      "homepageUrl": "https://deepgram.com",
+      "careerPageUrl": "https://deepgram.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "DriveTime",
+      "homepageUrl": "https://www.drivetime.com",
+      "careerPageUrl": "https://jobs.drivetime.com",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Ensora Health",
+      "homepageUrl": "https://ensorahealth.com",
+      "careerPageUrl": "https://ensorahealth.com/careers/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Finoit Inc.",
+      "homepageUrl": "https://www.finoit.com",
+      "careerPageUrl": "https://www.finoit.com/careers/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Fiserv, Inc.",
+      "homepageUrl": "https://www.fiserv.com",
+      "careerPageUrl": "https://careers.fiserv.com",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Fitch Group",
+      "homepageUrl": "https://www.fitchratings.com",
+      "careerPageUrl": "https://www.fitchratings.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Ford Motor Company",
+      "homepageUrl": "https://corporate.ford.com/",
+      "careerPageUrl": "https://www.careers.ford.com/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "G2i",
+      "homepageUrl": "https://www.g2i.co",
+      "careerPageUrl": "https://jobs.ashbyhq.com/g2i",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Insight Global",
+      "homepageUrl": "https://insightglobal.com",
+      "careerPageUrl": "https://careers-insightglobal.icims.com/jobs",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Insight Global",
+      "homepageUrl": "https://insightglobal.com",
+      "careerPageUrl": "https://careers.insightglobal.com/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Kforce Inc",
+      "homepageUrl": "https://www.kforce.com",
+      "careerPageUrl": "https://www.kforce.com/find-work/search-jobs/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Kforce Inc",
+      "homepageUrl": "https://www.kforce.com",
+      "careerPageUrl": "https://www.kforce.com/find-work/search-jobs/#/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Kforce Technology Staffing",
+      "homepageUrl": "https://www.kforce.com/",
+      "careerPageUrl": "https://www.kforce.com/find-work/search-jobs/#/?t=&l=%5B%5D",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Nagarro",
+      "homepageUrl": "https://www.nagarro.com",
+      "careerPageUrl": "https://www.nagarro.com/en/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Nagarro",
+      "homepageUrl": "https://www.nagarro.com",
+      "careerPageUrl": "https://www.nagarro.com/en/careers/us",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "OnePay",
+      "homepageUrl": "https://www.onepay.com",
+      "careerPageUrl": "https://www.onepay.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Patriot Software, LLC",
+      "homepageUrl": "https://www.patriotsoftware.com",
+      "careerPageUrl": "https://careers.patriotsoftware.com/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Render",
+      "homepageUrl": "https://render.com",
+      "careerPageUrl": "https://docs.render.com/cronjobs",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Render",
+      "homepageUrl": "https://render.com",
+      "careerPageUrl": "https://render.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "RethinkFirst",
+      "homepageUrl": "https://www.rethinkfirst.com/",
+      "careerPageUrl": "https://rethink.applytojob.com/apply/qvkXIl9PhC/Senior-Full-Stack-Engineer-Architecture-Team?source=Our%20Career%20Page%20Widget",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "SES",
+      "homepageUrl": "https://www.ses.com",
+      "careerPageUrl": "https://careers.ses.com/search/?createNewAlert=false&q=&locationsearch=&optionsFacetsDD_customfield3=&optionsFacetsDD_customfield5=",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "SES",
+      "homepageUrl": "https://www.ses.com",
+      "careerPageUrl": "https://www.ses.com/company/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "STAND 8",
+      "homepageUrl": "https://www.stand8.io",
+      "careerPageUrl": "https://www.stand8.io/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Stellar IT Solutions",
+      "homepageUrl": "https://stellar.org",
+      "careerPageUrl": "https://recruiting.paylocity.com/Recruiting/Jobs/Details/3664033",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "STR",
+      "homepageUrl": "https://str.us",
+      "careerPageUrl": "https://str.us//careers/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "STR",
+      "homepageUrl": "https://str.us",
+      "careerPageUrl": "https://str.us/careers/job-postings/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Strategic Employment Partners (SEP)",
+      "homepageUrl": "https://strategicemployment.com",
+      "careerPageUrl": "https://strategicemployment.com/careers",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Strategic Employment Partners (SEP)",
+      "homepageUrl": "https://strategicemployment.com",
+      "careerPageUrl": "https://strategicemployment.com/jobs",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "VetsEZ",
+      "homepageUrl": "https://vetsez.com/",
+      "careerPageUrl": "https://vetsez.breezy.hr/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": "Career URL verified by user in Cursor browser.",
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Zynga",
+      "homepageUrl": "https://www.zynga.com",
+      "careerPageUrl": "https://www.zynga.com/jobs/careers/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    },
+    {
+      "companyName": "Zynga",
+      "homepageUrl": "https://www.zynga.com",
+      "careerPageUrl": "https://www.zynga.com/jobs/job-openings/",
+      "status": "CAREER_PAGE_FOUND",
+      "pagesReviewed": 1,
+      "reason": null,
+      "dateDiscovered": "2026-08-19"
+    }
+  ]
 }

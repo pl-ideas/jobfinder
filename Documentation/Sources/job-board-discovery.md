@@ -2,6 +2,11 @@
 
 Daily job-board scanning is implemented in `Source\jobfinder\discovery.py` and `Source\jobfinder\sources\web_boards.py`.
 
+Stage 1 is split into two commands:
+
+* `discover-job-boards`: scans supported boards listed in `Documentation\job-board-sites-no-auth.md`.
+* `discover-job-boards-auth`: prints browser-session checkpoints for boards listed in `Documentation\job-board-sites-auth.md`.
+
 ## Supported Boards
 
 The scan order is:
@@ -12,7 +17,23 @@ The scan order is:
 4. LinkedIn Jobs
 5. Wellfound
 
-Public boards are processed before login-gated boards. If LinkedIn Jobs, Wellfound, or another source requires authentication, the scanner returns an explicit checkpoint and does not attempt to log in, bypass controls, save jobs, apply, or mutate account data.
+Public boards are processed before login-gated boards. If LinkedIn Jobs, Wellfound, or another source requires authentication, the scanner saves accessible results collected so far, returns an explicit browser-login checkpoint, and does not attempt to log in, bypass controls, save jobs, apply, or mutate account data.
+
+Authentication-blocked sites should be handled as a manual browser-session follow-up:
+
+1. The user opens the site in a browser.
+2. The user logs in manually.
+3. The agent may read the already-authenticated browser session only after the user confirms login is complete.
+4. Credentials, cookies, tokens, and session data must not be stored in the repository or Job Database.
+
+When `discover-job-boards` detects authentication for a site, it also updates the local board lists:
+
+```text
+Documentation\job-board-sites-no-auth.md
+Documentation\job-board-sites-auth.md
+```
+
+The site is removed from the no-auth list and added to the auth-required list.
 
 ## Output
 
@@ -56,13 +77,19 @@ Add a `PublicJobBoardSource` subclass in `Source\jobfinder\sources\web_boards.py
 
 ## Running
 
-From `Source`:
+From `Source`, scan no-auth boards:
 
 ```powershell
-python -m jobfinder.cli discover-daily
+python -m jobfinder.cli discover-job-boards
 ```
 
-`discover-job-boards` is a compatibility alias for the same stage 1 scan.
+Print the next auth-required browser-session checkpoint separately:
+
+```powershell
+python -m jobfinder.cli discover-job-boards-auth
+```
+
+`discover-daily` is an alias for the no-auth stage 1 scan.
 
 The command prints progress while it scans: output target, current site, current search term, candidate listing count, detail pages reviewed, collected job counts, dedupe count, and saved JSON path. Use `--quiet` to suppress progress messages, or `--limit-per-query` to cap detail pages reviewed per search term during development.
 

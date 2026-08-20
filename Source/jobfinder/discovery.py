@@ -44,6 +44,7 @@ def run_daily_discovery(
     output_dir: Path | None = None,
     generated_on: date | None = None,
     limit_per_query: int = 100,
+    source_names: list[str] | None = None,
     stop_on_authentication_required: bool = True,
     progress: ProgressCallback | None = None,
 ) -> DailyDiscoveryResult:
@@ -57,7 +58,7 @@ def run_daily_discovery(
     _report(progress, "Starting daily job discovery.")
     _report(progress, f"Output target: {output_path}")
 
-    for source in default_sources():
+    for source in _selected_sources(source_names):
         _report(progress, f"Scanning {source.display_name}.")
         result = _scan_source(source, limit_per_query=limit_per_query, progress=progress)
         if result.authentication_required:
@@ -100,6 +101,19 @@ def _scan_source(
         return source.scan(limit_per_query=limit_per_query, progress=progress)
     except Exception as error:  # noqa: BLE001 - source failures must not destroy other boards' results.
         return SourceScanResult(source.display_name, failed_reason=str(error))
+
+
+def _selected_sources(source_names: list[str] | None = None) -> list[PublicJobBoardSource]:
+    sources = default_sources()
+    if source_names is None:
+        return sources
+
+    requested = {_source_key(name) for name in source_names}
+    return [source for source in sources if _source_key(source.display_name) in requested]
+
+
+def _source_key(value: str) -> str:
+    return " ".join(value.casefold().split())
 
 
 def _report(progress: ProgressCallback | None, message: str) -> None:
